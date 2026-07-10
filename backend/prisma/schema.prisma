@@ -1,0 +1,575 @@
+// University Task & Collaboration Management System
+// Prisma schema — PostgreSQL
+// Hierarchy: University -> Space -> Cluster (self-nestable) -> Task
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────
+
+enum SystemRole {
+  SUPER_ADMIN
+  USER // ordinary user; effective privileges derive from memberships
+}
+
+enum SpaceRole {
+  SPACE_ADMIN
+  MEMBER
+}
+
+enum ClusterRole {
+  CLUSTER_ADMIN // Faculty
+  TEACHING_ASSISTANT
+  STUDENT
+}
+
+enum ClusterKind {
+  CLASS
+  SUBJECT
+  LAB
+  PROJECT
+  RESEARCH_GROUP
+  SEMESTER
+  GENERIC
+}
+
+enum TaskType {
+  ASSIGNMENT
+  LAB_TASK
+  PROJECT
+  GENERIC
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  REVIEW
+  COMPLETED
+  REJECTED
+  LATE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum SubmissionStatus {
+  SUBMITTED
+  ACCEPTED
+  REJECTED
+  RESUBMIT
+}
+
+enum NotificationType {
+  TASK_ASSIGNED
+  TASK_UPDATED
+  TASK_COMPLETED
+  COMMENT_ADDED
+  REPLY_ADDED
+  DEADLINE_NEAR
+  ANNOUNCEMENT_POSTED
+  MENTIONED
+  NEW_CHAT_MESSAGE
+  SUBMISSION_GRADED
+}
+
+enum DependencyType {
+  BLOCKS
+  BLOCKED_BY
+}
+
+// ─────────────────────────────────────────────────────────────
+// Core hierarchy
+// ─────────────────────────────────────────────────────────────
+
+model University {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  logoUrl   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  spaces Space[]
+  users  User[]
+}
+
+model User {
+  id           String     @id @default(cuid())
+  universityId String
+  university   University  @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  email        String     @unique
+  passwordHash String
+  fullName     String
+  avatarColor  String     @default("#4F46E5")
+  avatarUrl    String?
+  systemRole   SystemRole @default(USER)
+  isActive     Boolean    @default(true)
+  lastLoginAt  DateTime?
+  failedLoginAttempts Int  @default(0)
+  lockedUntil  DateTime?
+  mustChangePassword Boolean @default(false)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  spaceMemberships   SpaceMembership[]
+  clusterMemberships ClusterMembership[]
+  refreshTokens      RefreshToken[]
+
+  createdTasks    Task[]           @relation("TaskCreator")
+  assignedTasks   TaskAssignee[]
+  watchedTasks    TaskWatcher[]
+  comments        Comment[]
+  attachments     Attachment[]     @relation("AttachmentUploader")
+  activities      ActivityLog[]
+  announcements   Announcement[]   @relation("AnnouncementAuthor")
+  chatMessages    ChatMessage[]
+  notifications   Notification[]   @relation("NotificationRecipient")
+  submissions     Submission[]
+  gradesGiven     Grade[]          @relation("GradeGrader")
+  auditLogs       AuditLog[]
+  bookmarks       Bookmark[]
+  subtaskAssigned Subtask[]        @relation("SubtaskAssignee")
+
+  @@index([universityId])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Space {
+  id           String     @id @default(cuid())
+  universityId String
+  university   University  @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  color        String     @default("#0F766E")
+  icon         String?
+  isArchived   Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  clusters    Cluster[]
+  memberships SpaceMembership[]
+
+  @@index([universityId])
+}
+
+model SpaceMembership {
+  id       String    @id @default(cuid())
+  spaceId  String
+  space    Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     SpaceRole @default(MEMBER)
+  joinedAt DateTime  @default(now())
+
+  @@unique([spaceId, userId])
+  @@index([userId])
+}
+
+model Cluster {
+  id              String      @id @default(cuid())
+  spaceId         String
+  space           Space       @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  parentClusterId String?
+  parentCluster   Cluster?    @relation("ClusterTree", fields: [parentClusterId], references: [id], onDelete: Cascade)
+  childClusters   Cluster[]   @relation("ClusterTree")
+  name            String
+  description     String?
+  kind            ClusterKind @default(GENERIC)
+  color           String      @default("#2563EB")
+  isArchived      Boolean     @default(false)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  memberships   ClusterMembership[]
+  tasks         Task[]
+  announcements Announcement[]
+  chatMessages  ChatMessage[]
+  files         FileAsset[]
+  events        CalendarEvent[]
+  labels        Label[]
+
+  @@index([spaceId])
+  @@index([parentClusterId])
+}
+
+model ClusterMembership {
+  id        String      @id @default(cuid())
+  clusterId String
+  cluster   Cluster     @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      ClusterRole @default(STUDENT)
+  joinedAt  DateTime    @default(now())
+
+  @@unique([clusterId, userId])
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Tasks
+// ─────────────────────────────────────────────────────────────
+
+model Task {
+  id            String       @id @default(cuid())
+  clusterId     String
+  cluster       Cluster      @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  createdById   String
+  createdBy     User         @relation("TaskCreator", fields: [createdById], references: [id])
+  title         String
+  description   String?
+  type          TaskType     @default(GENERIC)
+  status        TaskStatus   @default(OPEN)
+  priority      TaskPriority @default(MEDIUM)
+  startDate     DateTime?
+  dueDate       DateTime?
+  estimatedMins Int?
+  isArchived    Boolean      @default(false)
+
+  // Recurrence (iCal-like RRULE string, evaluated app-side)
+  recurrenceRule String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignees    TaskAssignee[]
+  watchers     TaskWatcher[]
+  labels       TaskLabel[]
+  subtasks     Subtask[]
+  checklist    ChecklistItem[]
+  comments     Comment[]
+  attachments  Attachment[]
+  activities   ActivityLog[]
+  submissions  Submission[]
+  grades       Grade[]
+  bookmarks    Bookmark[]
+
+  dependenciesFrom TaskDependency[] @relation("DependencyFrom")
+  dependenciesTo   TaskDependency[] @relation("DependencyTo")
+
+  @@index([clusterId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model TaskAssignee {
+  taskId     String
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignedAt DateTime @default(now())
+
+  @@id([taskId, userId])
+  @@index([userId])
+}
+
+model TaskWatcher {
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@index([userId])
+}
+
+model TaskDependency {
+  id             String         @id @default(cuid())
+  fromTaskId     String
+  fromTask       Task           @relation("DependencyFrom", fields: [fromTaskId], references: [id], onDelete: Cascade)
+  toTaskId       String
+  toTask         Task           @relation("DependencyTo", fields: [toTaskId], references: [id], onDelete: Cascade)
+  type           DependencyType @default(BLOCKS)
+  createdAt      DateTime       @default(now())
+
+  @@unique([fromTaskId, toTaskId, type])
+}
+
+model Label {
+  id        String      @id @default(cuid())
+  clusterId String
+  cluster   Cluster     @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  name      String
+  color     String      @default("#64748B")
+  tasks     TaskLabel[]
+
+  @@unique([clusterId, name])
+}
+
+model TaskLabel {
+  taskId  String
+  task    Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  labelId String
+  label   Label  @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, labelId])
+}
+
+model Subtask {
+  id           String     @id @default(cuid())
+  taskId       String
+  task         Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  title        String
+  status       TaskStatus @default(OPEN)
+  dueDate      DateTime?
+  assigneeId   String?
+  assignee     User?      @relation("SubtaskAssignee", fields: [assigneeId], references: [id])
+  orderIndex   Int        @default(0)
+  createdAt    DateTime   @default(now())
+
+  @@index([taskId])
+}
+
+model ChecklistItem {
+  id         String   @id @default(cuid())
+  taskId     String
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  text       String
+  isChecked  Boolean  @default(false)
+  orderIndex Int      @default(0)
+
+  @@index([taskId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Collaboration: comments, chat, announcements
+// ─────────────────────────────────────────────────────────────
+
+model Comment {
+  id              String    @id @default(cuid())
+  taskId          String
+  task            Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId        String
+  author          User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parentCommentId String?
+  parentComment   Comment?  @relation("CommentThread", fields: [parentCommentId], references: [id], onDelete: Cascade)
+  replies         Comment[] @relation("CommentThread")
+  body            String
+  mentions        String[]  @default([]) // userIds mentioned
+  isEdited        Boolean   @default(false)
+  isDeleted       Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  attachments Attachment[]
+
+  @@index([taskId])
+  @@index([parentCommentId])
+}
+
+model Announcement {
+  id        String   @id @default(cuid())
+  clusterId String
+  cluster   Cluster  @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation("AnnouncementAuthor", fields: [authorId], references: [id])
+  title     String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  attachments Attachment[]
+
+  @@index([clusterId])
+}
+
+model ChatMessage {
+  id              String        @id @default(cuid())
+  clusterId       String
+  cluster         Cluster       @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  authorId        String
+  author          User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parentMessageId String?
+  parentMessage   ChatMessage?  @relation("ChatThread", fields: [parentMessageId], references: [id], onDelete: Cascade)
+  replies         ChatMessage[] @relation("ChatThread")
+  body            String
+  mentions        String[]      @default([])
+  isEdited        Boolean       @default(false)
+  isDeleted       Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  attachments Attachment[]
+
+  @@index([clusterId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Files, submissions, grades
+// ─────────────────────────────────────────────────────────────
+
+model Attachment {
+  id             String        @id @default(cuid())
+  uploaderId     String
+  uploader       User          @relation("AttachmentUploader", fields: [uploaderId], references: [id])
+  fileName       String
+  storageKey     String
+  mimeType       String
+  sizeBytes      Int
+  createdAt      DateTime      @default(now())
+
+  taskId         String?
+  task           Task?         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  commentId      String?
+  comment        Comment?      @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  announcementId String?
+  announcement   Announcement? @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  chatMessageId  String?
+  chatMessage    ChatMessage?  @relation(fields: [chatMessageId], references: [id], onDelete: Cascade)
+  submissionId   String?
+  submission     Submission?   @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+}
+
+// A shared cluster-level file library entry.
+model FileAsset {
+  id         String   @id @default(cuid())
+  clusterId  String
+  cluster    Cluster  @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  fileName   String
+  storageKey String
+  mimeType   String
+  sizeBytes  Int
+  uploadedBy String
+  createdAt  DateTime @default(now())
+
+  @@index([clusterId])
+}
+
+model Submission {
+  id        String           @id @default(cuid())
+  taskId    String
+  task      Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  studentId String
+  student   User             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  version   Int              @default(1)
+  note      String?
+  links     String[]         @default([])
+  status    SubmissionStatus @default(SUBMITTED)
+  createdAt DateTime         @default(now())
+
+  attachments Attachment[]
+  grade       Grade?
+
+  @@index([taskId])
+  @@index([studentId])
+}
+
+model Grade {
+  id           String   @id @default(cuid())
+  taskId       String
+  task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  submissionId String?  @unique
+  submission   Submission? @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+  graderId     String
+  grader       User     @relation("GradeGrader", fields: [graderId], references: [id])
+  score        Float
+  maxScore     Float    @default(100)
+  feedback     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([taskId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Calendar, notifications, activity, audit, bookmarks
+// ─────────────────────────────────────────────────────────────
+
+model CalendarEvent {
+  id          String   @id @default(cuid())
+  clusterId   String
+  cluster     Cluster  @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  kind        String   @default("EVENT") // EXAM, MEETING, LAB, DEADLINE, EVENT
+  startAt     DateTime
+  endAt       DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([clusterId])
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  recipientId String
+  recipient   User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  type        NotificationType
+  title       String
+  body        String?
+  link        String?
+  isRead      Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+
+  @@index([recipientId, isRead])
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actorId   String
+  actor     User     @relation(fields: [actorId], references: [id])
+  action    String   // e.g. "STATUS_CHANGED", "ASSIGNEE_ADDED"
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id])
+  action     String
+  entityType String
+  entityId   String?
+  meta       Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+}
+
+model Bookmark {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, taskId])
+}
+
+model TaskTemplate {
+  id          String       @id @default(cuid())
+  name        String
+  description String?
+  type        TaskType     @default(GENERIC)
+  priority    TaskPriority @default(MEDIUM)
+  payload     Json         // serialized checklist/subtasks/labels default
+  createdAt   DateTime     @default(now())
+}
