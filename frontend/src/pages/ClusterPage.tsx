@@ -11,6 +11,8 @@ import { CreateTaskModal } from '../components/CreateTaskModal';
 import { AnnouncementsPanel } from '../components/AnnouncementsPanel';
 import { ChatPanel } from '../components/ChatPanel';
 import { ClusterFiles } from '../components/ClusterFiles';
+import { ClusterMembers } from '../components/ClusterMembers';
+import { RenameModal } from '../components/RenameModal';
 import { initials } from '../components/ui';
 
 type ClusterDetail = Cluster & {
@@ -18,11 +20,12 @@ type ClusterDetail = Cluster & {
   memberships?: { role: string; user: { id: string } }[];
 };
 
-type Tab = 'tasks' | 'announcements' | 'chat' | 'files';
+type Tab = 'tasks' | 'announcements' | 'chat' | 'files' | 'members';
 const TABS: { key: Tab; label: string }[] = [
   { key: 'tasks', label: 'Tasks' },
   { key: 'announcements', label: 'Announcements' },
   { key: 'chat', label: 'Chat' },
+  { key: 'members', label: 'Members' },
   { key: 'files', label: 'Files' },
 ];
 
@@ -32,6 +35,7 @@ export function ClusterPage() {
   const me = useAuth((s) => s.user);
   const [openTask, setOpenTask] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [renaming, setRenaming] = useState(false);
   const [tab, setTab] = useState<Tab>('tasks');
 
   const { data: cluster } = useQuery({
@@ -46,10 +50,12 @@ export function ClusterPage() {
     enabled: !!clusterId && tab === 'tasks',
   });
 
-  // Can the current user post announcements? (Faculty / TA / Super Admin.)
+  // Can the current user post announcements / add members? (Faculty / TA / Super Admin.)
   const myRole = cluster?.memberships?.find((m) => m.user.id === me?.id)?.role;
-  const canPost =
-    me?.systemRole === 'SUPER_ADMIN' || myRole === 'CLUSTER_ADMIN' || myRole === 'TEACHING_ASSISTANT';
+  const isSuper = me?.systemRole === 'SUPER_ADMIN';
+  const canPost = isSuper || myRole === 'CLUSTER_ADMIN' || myRole === 'TEACHING_ASSISTANT';
+  // Removing members / renaming the cluster stays with Faculty and admins.
+  const canManageRoles = isSuper || myRole === 'CLUSTER_ADMIN';
 
   // Join the cluster's realtime room for live task/comment/chat/announcement updates.
   useEffect(() => {
@@ -74,6 +80,16 @@ export function ClusterPage() {
         </span>
         <h2 style={{ margin: 0 }}>{cluster?.name ?? 'Cluster'}</h2>
         <span className="chip">{cluster?.kind}</span>
+        {isSuper && cluster && (
+          <button
+            className="btn btn-ghost"
+            title="Rename cluster"
+            style={{ padding: '2px 8px' }}
+            onClick={() => setRenaming(true)}
+          >
+            ✎ Rename
+          </button>
+        )}
         {tab === 'tasks' && (
           <button
             className="btn btn-primary"
@@ -113,10 +129,28 @@ export function ClusterPage() {
 
       {tab === 'chat' && clusterId && <ChatPanel clusterId={clusterId} />}
 
+      {tab === 'members' && clusterId && (
+        <ClusterMembers clusterId={clusterId} canManage={canPost} canManageRoles={canManageRoles} />
+      )}
+
       {tab === 'files' && clusterId && <ClusterFiles clusterId={clusterId} />}
 
       {openTask && <TaskDrawer taskId={openTask} onClose={() => setOpenTask(null)} />}
       {creating && clusterId && <CreateTaskModal clusterId={clusterId} onClose={() => setCreating(false)} />}
+
+      {renaming && cluster && clusterId && (
+        <RenameModal
+          title="Rename cluster"
+          label="Cluster name"
+          currentValue={cluster.name}
+          onSave={async (name) => {
+            await api.patch(`/clusters/${clusterId}`, { name });
+            qc.invalidateQueries({ queryKey: ['cluster', clusterId] });
+            qc.invalidateQueries({ queryKey: ['clusters'] });
+          }}
+          onClose={() => setRenaming(false)}
+        />
+      )}
     </div>
   );
 }

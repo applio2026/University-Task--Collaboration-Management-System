@@ -276,10 +276,13 @@ model Task {
 
 model TaskAssignee {
   taskId     String
-  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task       Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
   userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  assignedAt DateTime @default(now())
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Each assignee tracks their own progress; the parent task can only be closed
+  // once every assignee's status is COMPLETED.
+  status     TaskStatus @default(OPEN)
+  assignedAt DateTime   @default(now())
 
   @@id([taskId, userId])
   @@index([userId])

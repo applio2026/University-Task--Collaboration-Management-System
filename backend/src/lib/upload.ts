@@ -1,3 +1,4 @@
+import type { NextFunction, Request, Response } from 'express';
 import multer from 'multer';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -16,28 +17,93 @@ const storage = multer.diskStorage({
   },
 });
 
-// Executable / script types that must never be stored, regardless of who
-// uploads them. Files are always served as attachments, but hosting malware
-// for other members to download is still a real risk.
-const BLOCKED_EXTENSIONS = new Set([
-  '.exe', '.msi', '.bat', '.cmd', '.com', '.scr', '.pif', '.cpl',
-  '.ps1', '.psm1', '.vbs', '.vbe', '.js', '.jse', '.wsf', '.wsh',
-  '.jar', '.dll', '.sys', '.hta', '.reg', '.lnk', '.apk', '.app', '.sh',
+// Uploads are restricted to raster images and PDFs — the only formats the app
+// needs — using an ALLOW-list (an executable/script deny-list is unsafe: any type
+// not on it slips through). Notably absent: SVG, which is XML that can carry
+// <script>, so it is treated as executable content and rejected.
+export const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.pdf']);
+const ALLOWED_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/bmp',
+  'application/pdf',
 ]);
+
+const ALLOWED_MESSAGE = 'Only image files (JPEG, PNG, GIF, WebP, BMP) or PDF documents can be uploaded.';
 
 /** Shared Multer instance: disk storage, 20 MB per file, up to 10 files. */
 export const upload = multer({
   storage,
   limits: { fileSize: 20 * 1024 * 1024, files: 10 },
   fileFilter: (_req, file, cb) => {
+    // First gate: both the extension AND the declared MIME type must be allowed.
+    // (Client-declared values can be spoofed — the content is verified after the
+    // file lands on disk by `verifyUploadedFiles`.)
     const ext = path.extname(file.originalname).toLowerCase();
-    if (BLOCKED_EXTENSIONS.has(ext)) {
-      cb(badRequest(`Files of type "${ext}" are not allowed`));
+    if (!ALLOWED_EXTENSIONS.has(ext) || !ALLOWED_MIME_TYPES.has(file.mimetype)) {
+      cb(badRequest(ALLOWED_MESSAGE));
       return;
     }
     cb(null, true);
   },
 });
+
+/**
+ * Reads the leading bytes ("magic number") of a file and returns the format it
+ * genuinely is, or null. This defeats a renamed executable (e.g. malware.exe
+ * saved as report.pdf): the extension/MIME can lie, the file signature cannot.
+ */
+function sniffFileType(filePath: string): 'jpeg' | 'png' | 'gif' | 'webp' | 'bmp' | 'pdf' | null {
+  let fd: number | null = null;
+  try {
+    fd = fs.openSync(filePath, 'r');
+    const buf = Buffer.alloc(16);
+    const read = fs.readSync(fd, buf, 0, 16, 0);
+    if (read < 4) return null;
+    if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpeg';
+    if (
+      buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47 &&
+      buf[4] === 0x0d && buf[5] === 0x0a && buf[6] === 0x1a && buf[7] === 0x0a
+    )
+      return 'png';
+    const ascii4 = buf.toString('ascii', 0, 4);
+    if (ascii4 === 'GIF8') return 'gif';
+    if (ascii4 === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') return 'webp';
+    if (buf[0] === 0x42 && buf[1] === 0x4d) return 'bmp';
+    if (ascii4 === '%PDF') return 'pdf';
+    return null;
+  } catch {
+    return null;
+  } finally {
+    if (fd !== null) fs.closeSync(fd);
+  }
+}
+
+/**
+ * Middleware to run immediately after `upload.array('files')` / `upload.single`.
+ * Confirms every stored file's real content is an allowed image/PDF; on any
+ * mismatch it deletes ALL files from the request and rejects with 400, so no
+ * disguised executable is ever persisted or exposed for download.
+ */
+export function verifyUploadedFiles(req: Request, _res: Response, next: NextFunction): void {
+  const files = [
+    ...((req.files as Express.Multer.File[] | undefined) ?? []),
+    ...(req.file ? [req.file] : []),
+  ];
+  if (files.length === 0) {
+    next();
+    return;
+  }
+  const bad = files.find((f) => sniffFileType(f.path) === null);
+  if (bad) {
+    for (const f of files) fs.rm(f.path, { force: true }, () => undefined);
+    next(badRequest(ALLOWED_MESSAGE));
+    return;
+  }
+  next();
+}
 
 /**
  * Resolves a stored file path, guaranteeing it stays inside the uploads

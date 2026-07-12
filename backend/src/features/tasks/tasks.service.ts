@@ -188,7 +188,7 @@ export async function updateTask(
 ) {
   const existing = await prisma.task.findUnique({
     where: { id: taskId },
-    include: { subtasks: { select: { status: true } } },
+    include: { subtasks: { select: { status: true } }, assignees: { select: { status: true } } },
   });
   if (!existing) throw notFound('Task not found');
 
@@ -198,6 +198,21 @@ export async function updateTask(
     const open = existing.subtasks.filter((s) => s.status !== 'COMPLETED').length;
     if (open > 0) {
       throw badRequest(`Complete all ${open} subtask(s) before moving this task out of "In Progress".`);
+    }
+  }
+
+  // Guard: the parent task can only be marked COMPLETED once every assignee has
+  // finished their own part.
+  if (
+    data.status === TaskStatus.COMPLETED &&
+    existing.status !== TaskStatus.COMPLETED &&
+    existing.assignees.length > 0
+  ) {
+    const pending = existing.assignees.filter((a) => a.status !== TaskStatus.COMPLETED).length;
+    if (pending > 0) {
+      throw badRequest(
+        `Cannot close this task yet — ${pending} of ${existing.assignees.length} assignee(s) haven't completed their part.`,
+      );
     }
   }
 
@@ -237,11 +252,39 @@ export async function updateTask(
 }
 
 export async function setAssignees(taskId: string, actorId: string, userIds: string[]) {
+  // Diff rather than wipe-and-recreate so an existing assignee keeps their
+  // individual status (progress isn't reset when the roster is edited).
+  const existing = await prisma.taskAssignee.findMany({ where: { taskId }, select: { userId: true } });
+  const existingIds = new Set(existing.map((e) => e.userId));
+  const nextIds = new Set(userIds);
+  const toRemove = [...existingIds].filter((id) => !nextIds.has(id));
+  const toAdd = userIds.filter((id) => !existingIds.has(id));
+
   await prisma.$transaction([
-    prisma.taskAssignee.deleteMany({ where: { taskId } }),
-    prisma.taskAssignee.createMany({ data: userIds.map((userId) => ({ taskId, userId })) }),
+    ...(toRemove.length ? [prisma.taskAssignee.deleteMany({ where: { taskId, userId: { in: toRemove } } })] : []),
+    ...(toAdd.length ? [prisma.taskAssignee.createMany({ data: toAdd.map((userId) => ({ taskId, userId })) })] : []),
   ]);
   await logActivity(taskId, actorId, 'ASSIGNEES_UPDATED', { userIds });
+  return getTask(taskId);
+}
+
+/** A student updates their own progress on a task (or a TA/Faculty updates any). */
+export async function setAssigneeStatus(
+  taskId: string,
+  userId: string,
+  actorId: string,
+  status: TaskStatus,
+) {
+  const assignee = await prisma.taskAssignee.findUnique({
+    where: { taskId_userId: { taskId, userId } },
+  });
+  if (!assignee) throw badRequest('That user is not assigned to this task.');
+
+  await prisma.taskAssignee.update({
+    where: { taskId_userId: { taskId, userId } },
+    data: { status },
+  });
+  await logActivity(taskId, actorId, 'ASSIGNEE_STATUS_CHANGED', { userId, status });
   return getTask(taskId);
 }
 

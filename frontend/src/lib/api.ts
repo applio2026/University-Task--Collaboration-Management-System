@@ -1,4 +1,5 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import type { User } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api';
 
@@ -20,20 +21,40 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// On 401, try one silent refresh, then replay the request.
-let refreshing: Promise<string | null> | null = null;
-
-async function doRefresh(): Promise<string | null> {
-  try {
-    const { data } = await axios.post(`${API_URL}/auth/refresh`, {}, { withCredentials: true });
-    accessToken = data.accessToken;
-    return accessToken;
-  } catch {
-    accessToken = null;
-    return null;
-  }
+export interface RefreshResult {
+  accessToken: string;
+  user: User;
 }
 
+// Single-flight refresh shared by both app bootstrap and the 401 interceptor.
+// Refresh tokens are single-use (rotated server-side), so two concurrent
+// /auth/refresh calls with the same cookie would make the second one fail on an
+// already-rotated token and log the user out. React StrictMode's double effect
+// invocation (which runs bootstrap twice) is the most common trigger — hence the
+// "logged out after refresh" symptom. Coalescing every caller onto one in-flight
+// promise guarantees exactly one refresh request per burst.
+let refreshPromise: Promise<RefreshResult | null> | null = null;
+
+export function refreshSession(): Promise<RefreshResult | null> {
+  if (!refreshPromise) {
+    refreshPromise = axios
+      .post(`${API_URL}/auth/refresh`, {}, { withCredentials: true })
+      .then((res) => {
+        accessToken = res.data.accessToken;
+        return { accessToken: res.data.accessToken as string, user: res.data.user as User };
+      })
+      .catch(() => {
+        accessToken = null;
+        return null;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
+
+// On 401, try one silent refresh, then replay the request.
 api.interceptors.response.use(
   (res) => res,
   async (error: AxiosError) => {
@@ -41,11 +62,9 @@ api.interceptors.response.use(
     const isAuthCall = original?.url?.includes('/auth/');
     if (error.response?.status === 401 && !original._retry && !isAuthCall) {
       original._retry = true;
-      refreshing = refreshing ?? doRefresh();
-      const newToken = await refreshing;
-      refreshing = null;
-      if (newToken) {
-        original.headers.Authorization = `Bearer ${newToken}`;
+      const result = await refreshSession();
+      if (result) {
+        original.headers.Authorization = `Bearer ${result.accessToken}`;
         return api(original);
       }
     }

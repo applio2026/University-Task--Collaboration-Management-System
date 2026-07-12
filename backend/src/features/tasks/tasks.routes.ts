@@ -7,7 +7,7 @@ import { authenticate } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { getClusterRole, requireClusterRole } from '../../middleware/rbac';
 import { badRequest, forbidden, notFound } from '../../lib/errors';
-import { upload, resolveUploadPath } from '../../lib/upload';
+import { upload, verifyUploadedFiles, resolveUploadPath } from '../../lib/upload';
 import { writeAudit } from '../../lib/audit';
 import { emitToCluster } from '../../realtime/io';
 import { notify } from '../notifications/notifications.service';
@@ -210,6 +210,32 @@ router.put(
   }),
 );
 
+// A student moves the status of their own assignment; TA/Faculty may update any
+// assignee's status. Requires cluster membership (Student+).
+router.patch(
+  '/tasks/:taskId/assignees/:userId/status',
+  requireTaskRole(ClusterRole.STUDENT),
+  validate({ body: z.object({ status: z.nativeEnum(TaskStatus) }) }),
+  asyncHandler(async (req, res) => {
+    const clusterId = (req as Request & { clusterId: string }).clusterId;
+    // Editing someone else's status is a privileged action (TA / Faculty+).
+    if (req.params.userId !== req.user!.id) {
+      const role = await getClusterRole(req.user!.id, clusterId, req.user!.systemRole);
+      if (!role || clusterRank[role] < clusterRank[ClusterRole.TEACHING_ASSISTANT]) {
+        throw forbidden('You can only change your own status.');
+      }
+    }
+    const task = await service.setAssigneeStatus(
+      req.params.taskId,
+      req.params.userId,
+      req.user!.id,
+      req.body.status,
+    );
+    emitToCluster(clusterId, 'task:updated', task);
+    res.json({ task });
+  }),
+);
+
 router.delete(
   '/tasks/:taskId',
   requireTaskRole(ClusterRole.CLUSTER_ADMIN),
@@ -343,6 +369,7 @@ router.post(
   '/tasks/:taskId/attachments',
   requireTaskRole(ClusterRole.STUDENT),
   upload.array('files'),
+  verifyUploadedFiles,
   asyncHandler(async (req, res) => {
     const files = (req.files as Express.Multer.File[] | undefined) ?? [];
     if (files.length === 0) throw badRequest('No files uploaded');

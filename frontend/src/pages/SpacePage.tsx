@@ -1,17 +1,20 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuth } from '../store/auth';
 import type { Cluster, Space } from '../types';
 import { initials } from '../components/ui';
 import { CreateClusterModal } from '../components/CreateClusterModal';
+import { RenameModal } from '../components/RenameModal';
 
 export function SpacePage() {
   const { spaceId } = useParams<{ spaceId: string }>();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const me = useAuth((s) => s.user);
   const [creating, setCreating] = useState(false);
+  const [renaming, setRenaming] = useState(false);
 
   const { data: space } = useQuery({
     queryKey: ['space', spaceId],
@@ -34,6 +37,16 @@ export function SpacePage() {
           {space ? initials(space.name) : '?'}
         </span>
         <h2 style={{ margin: 0 }}>{space?.name ?? 'Space'}</h2>
+        {canManage && space && (
+          <button
+            className="btn btn-ghost"
+            title="Rename space"
+            style={{ padding: '2px 8px' }}
+            onClick={() => setRenaming(true)}
+          >
+            ✎ Rename
+          </button>
+        )}
         {canManage && (
           <button className="btn btn-primary" style={{ marginLeft: 'auto' }} onClick={() => setCreating(true)}>
             ＋ New Cluster
@@ -78,6 +91,20 @@ export function SpacePage() {
 
       {creating && spaceId && (
         <CreateClusterModal spaceId={spaceId} spaceName={space?.name ?? ''} onClose={() => setCreating(false)} />
+      )}
+
+      {renaming && space && (
+        <RenameModal
+          title="Rename space"
+          label="Space name"
+          currentValue={space.name}
+          onSave={async (name) => {
+            await api.patch(`/spaces/${space.id}`, { name });
+            qc.invalidateQueries({ queryKey: ['space', spaceId] });
+            qc.invalidateQueries({ queryKey: ['spaces'] });
+          }}
+          onClose={() => setRenaming(false)}
+        />
       )}
     </div>
   );

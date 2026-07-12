@@ -5,7 +5,7 @@ import { prisma } from '../../lib/prisma';
 import { asyncHandler } from '../../lib/asyncHandler';
 import { authenticate } from '../../middleware/auth';
 import { getClusterRole, requireClusterRole } from '../../middleware/rbac';
-import { upload, resolveUploadPath } from '../../lib/upload';
+import { upload, verifyUploadedFiles, resolveUploadPath } from '../../lib/upload';
 import { badRequest, forbidden, notFound } from '../../lib/errors';
 
 const router = Router();
@@ -52,6 +52,7 @@ router.post(
   '/clusters/:clusterId/files',
   requireClusterRole(ClusterRole.STUDENT),
   upload.array('files'),
+  verifyUploadedFiles,
   asyncHandler(async (req, res) => {
     const files = (req.files as Express.Multer.File[] | undefined) ?? [];
     if (files.length === 0) throw badRequest('No files uploaded');

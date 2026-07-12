@@ -5,22 +5,27 @@ import axios from 'axios';
 import { api } from '../lib/api';
 import { getSocket } from '../lib/socket';
 import type { Comment, Task, TaskStatus } from '../types';
-import { Avatar, AvatarStack, PriorityPill, statusLabel } from './ui';
+import { Avatar, AvatarStack, PriorityPill, statusLabel, statusColor } from './ui';
 import { TaskAttachments } from './TaskAttachments';
 import { SubmissionsPanel } from './SubmissionsPanel';
 import { DependenciesPanel } from './DependenciesPanel';
 import { SubtasksSection } from './SubtasksSection';
 import { AssigneeManager } from './AssigneeManager';
 import { TaskHistory } from './TaskHistory';
+import { RenameModal } from './RenameModal';
+import { useAuth } from '../store/auth';
 
 const STATUSES: TaskStatus[] = ['OPEN', 'IN_PROGRESS', 'REVIEW', 'COMPLETED', 'REJECTED', 'LATE'];
 
 export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () => void }) {
   const qc = useQueryClient();
+  const me = useAuth((s) => s.user);
   const [reply, setReply] = useState('');
   const [tab, setTab] = useState<'comments' | 'history'>('comments');
   const [managingAssignees, setManagingAssignees] = useState(false);
+  const [assigneesExpanded, setAssigneesExpanded] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
 
   const { data: task } = useQuery({
@@ -52,11 +57,31 @@ export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () =>
       qc.invalidateQueries({ queryKey: ['cluster-tasks'] });
     },
     onError: (err) => {
-      // Surfaces the "complete subtasks first" guard (400) among others.
+      // Surfaces the "complete subtasks first" / "assignees not done" guards (400).
       setStatusError(
         axios.isAxiosError(err) && err.response?.data?.error?.message
           ? err.response.data.error.message
           : 'Could not change status.',
+      );
+    },
+  });
+
+  // A student moves their own assignment status; TA/Faculty/admin may move any.
+  const changeAssigneeStatus = useMutation({
+    mutationFn: async ({ userId, status }: { userId: string; status: string }) =>
+      api.patch(`/tasks/${taskId}/assignees/${userId}/status`, { status }),
+    onSuccess: () => {
+      setStatusError(null);
+      qc.invalidateQueries({ queryKey: ['task', taskId] });
+      qc.invalidateQueries({ queryKey: ['activity', taskId] });
+      qc.invalidateQueries({ queryKey: ['overview'] });
+      qc.invalidateQueries({ queryKey: ['cluster-tasks'] });
+    },
+    onError: (err) => {
+      setStatusError(
+        axios.isAxiosError(err) && err.response?.data?.error?.message
+          ? err.response.data.error.message
+          : 'Could not change assignee status.',
       );
     },
   });
@@ -89,7 +114,19 @@ export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () =>
             </button>
             {task && <PriorityPill priority={task.priority} />}
           </div>
-          <h3 style={{ margin: '8px 0 6px' }}>{task?.title ?? '…'}</h3>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, margin: '8px 0 6px' }}>
+            <h3 style={{ margin: 0, flex: 1 }}>{task?.title ?? '…'}</h3>
+            {task && me?.systemRole === 'SUPER_ADMIN' && (
+              <button
+                className="btn btn-ghost"
+                title="Rename task"
+                style={{ padding: '2px 8px', flexShrink: 0 }}
+                onClick={() => setRenaming(true)}
+              >
+                ✎
+              </button>
+            )}
+          </div>
 
           {task && (
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -125,13 +162,28 @@ export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () =>
             </p>
           )}
 
-          {/* Assignees — manageable after creation */}
+          {/* Assignees — expandable, with each student's own status */}
           {task && (
             <div style={{ marginTop: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-faint)', textTransform: 'uppercase' }}>
+                <button
+                  onClick={() => setAssigneesExpanded((v) => !v)}
+                  disabled={task.assignees.length === 0}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none',
+                    padding: 0, cursor: task.assignees.length ? 'pointer' : 'default',
+                    fontSize: 11, fontWeight: 700, color: 'var(--text-faint)', textTransform: 'uppercase',
+                  }}
+                >
+                  {task.assignees.length > 0 && <span>{assigneesExpanded ? '▾' : '▸'}</span>}
                   Assignees
-                </div>
+                  {task.assignees.length > 0 && (
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      ({task.assignees.filter((a) => (a.status ?? 'OPEN') === 'COMPLETED').length}/
+                      {task.assignees.length} done)
+                    </span>
+                  )}
+                </button>
                 <button
                   className="btn btn-ghost"
                   style={{ fontSize: 12, padding: '2px 8px' }}
@@ -140,11 +192,67 @@ export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () =>
                   {managingAssignees ? 'Cancel' : 'Manage'}
                 </button>
               </div>
-              {task.assignees.length > 0 ? (
-                <AvatarStack users={task.assignees.map((a) => a.user)} />
-              ) : (
+
+              {task.assignees.length === 0 ? (
                 <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>No assignees yet.</span>
+              ) : !assigneesExpanded ? (
+                <button
+                  onClick={() => setAssigneesExpanded(true)}
+                  title="Expand to see each student's status"
+                  style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer' }}
+                >
+                  <AvatarStack users={task.assignees.map((a) => a.user)} />
+                </button>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                  {task.assignees.map((a) => {
+                    const st = a.status ?? 'OPEN';
+                    const canEdit = a.user.id === me?.id || me?.systemRole === 'SUPER_ADMIN';
+                    return (
+                      <div
+                        key={a.user.id}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 0' }}
+                      >
+                        <Avatar user={a.user} size={24} />
+                        <span style={{ flex: 1, fontSize: 13 }}>
+                          {a.user.fullName}
+                          {a.user.id === me?.id && (
+                            <span style={{ color: 'var(--text-faint)', fontSize: 11 }}> (you)</span>
+                          )}
+                        </span>
+                        {canEdit ? (
+                          <select
+                            className="select"
+                            style={{ width: 138, padding: '3px 6px', fontSize: 12 }}
+                            value={st}
+                            disabled={changeAssigneeStatus.isPending}
+                            onChange={(e) =>
+                              changeAssigneeStatus.mutate({ userId: a.user.id, status: e.target.value })
+                            }
+                          >
+                            {STATUSES.map((s) => (
+                              <option key={s} value={s}>
+                                {statusLabel(s)}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span
+                            className="pill"
+                            style={{
+                              color: statusColor(st),
+                              background: `color-mix(in srgb, ${statusColor(st)} 14%, transparent)`,
+                            }}
+                          >
+                            {statusLabel(st)}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
+
               {managingAssignees && (
                 <AssigneeManager
                   taskId={taskId}
@@ -218,6 +326,22 @@ export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () =>
           </div>
         )}
       </div>
+
+      {renaming && task && (
+        <RenameModal
+          title="Rename task"
+          label="Task title"
+          currentValue={task.title}
+          minLength={1}
+          onSave={async (title) => {
+            await api.patch(`/tasks/${taskId}`, { title });
+            qc.invalidateQueries({ queryKey: ['task', taskId] });
+            qc.invalidateQueries({ queryKey: ['cluster-tasks'] });
+            qc.invalidateQueries({ queryKey: ['overview'] });
+          }}
+          onClose={() => setRenaming(false)}
+        />
+      )}
     </>
   );
 }

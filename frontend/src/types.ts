@@ -56,7 +56,7 @@ export interface Task {
   startDate?: string | null;
   dueDate?: string | null;
   recurrenceRule?: string | null;
-  assignees: { user: MiniUser }[];
+  assignees: { user: MiniUser; status?: TaskStatus }[];
   labels: { label: { id: string; name: string; color: string } }[];
   subtasks: Subtask[];
   checklist?: { id: string; text: string; isChecked: boolean }[];

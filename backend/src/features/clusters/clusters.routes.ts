@@ -113,9 +113,17 @@ router.get(
 
 router.post(
   '/clusters/:clusterId/members',
-  requireClusterRole(ClusterRole.CLUSTER_ADMIN),
+  // Teaching Assistants and above may enrol members; adding non-student roles
+  // (TA / Faculty) stays restricted to Cluster Admins (and Space/Super Admins).
+  requireClusterRole(ClusterRole.TEACHING_ASSISTANT),
   validate({ body: z.object({ userId: z.string(), role: z.nativeEnum(ClusterRole).default(ClusterRole.STUDENT) }) }),
   asyncHandler(async (req, res) => {
+    if (req.body.role !== ClusterRole.STUDENT) {
+      const callerRole = await getClusterRole(req.user!.id, req.params.clusterId, req.user!.systemRole);
+      if (callerRole !== ClusterRole.CLUSTER_ADMIN) {
+        throw forbidden('Only Faculty or admins can assign elevated cluster roles.');
+      }
+    }
     const membership = await service.addMember(req.params.clusterId, req.body.userId, req.body.role);
     writeAudit(req, 'CLUSTER_MEMBER_ADDED', 'Cluster', req.params.clusterId, { userId: req.body.userId, role: req.body.role });
     res.status(201).json({ membership });

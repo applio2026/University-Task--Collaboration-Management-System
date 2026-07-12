@@ -6,7 +6,7 @@ import { asyncHandler } from '../../lib/asyncHandler';
 import { authenticate } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { getClusterRole } from '../../middleware/rbac';
-import { upload } from '../../lib/upload';
+import { upload, verifyUploadedFiles } from '../../lib/upload';
 import { forbidden, notFound } from '../../lib/errors';
 import { getTaskClusterId } from '../tasks/tasks.service';
 import { notify } from '../notifications/notifications.service';
@@ -73,6 +73,7 @@ router.post(
   '/tasks/:taskId/submissions',
   requireTaskRole(ClusterRole.STUDENT),
   upload.array('files'),
+  verifyUploadedFiles,
   validate({
     body: z.object({
       note: z.string().optional(),

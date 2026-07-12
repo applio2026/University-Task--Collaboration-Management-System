@@ -9,6 +9,12 @@ import {
 import { badRequest, conflict, locked, unauthorized } from '../../lib/errors';
 
 const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// Refresh tokens are single-use and rotated on every call. Genuinely concurrent
+// requests (multiple tabs, a socket reconnect racing an API retry) can each
+// present the same cookie before the first rotation lands. Accepting an already-
+// rotated token for a brief grace window absorbs that race instead of logging the
+// user out, while still rejecting stale tokens replayed long after rotation.
+const REFRESH_REUSE_GRACE_MS = 30 * 1000;
 
 function publicUser(u: {
   id: string;
@@ -120,14 +126,21 @@ export async function refresh(refreshToken: string) {
   }
   const tokenHash = hashToken(refreshToken);
   const stored = await prisma.refreshToken.findUnique({ where: { tokenHash } });
-  if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
+  if (!stored || stored.expiresAt < new Date()) {
+    throw unauthorized('Refresh token expired or revoked');
+  }
+  // Reject a revoked token unless it was rotated within the grace window, in which
+  // case this is a concurrent-refresh race rather than a stale-token replay.
+  if (stored.revokedAt && stored.revokedAt.getTime() < Date.now() - REFRESH_REUSE_GRACE_MS) {
     throw unauthorized('Refresh token expired or revoked');
   }
   const user = await prisma.user.findUnique({ where: { id: payload.sub } });
   if (!user) throw unauthorized('User not found');
 
-  // Rotate: revoke old, issue new.
-  await prisma.refreshToken.update({ where: { tokenHash }, data: { revokedAt: new Date() } });
+  // Rotate: revoke old (if not already rotated by a racing request), issue new.
+  if (!stored.revokedAt) {
+    await prisma.refreshToken.update({ where: { tokenHash }, data: { revokedAt: new Date() } });
+  }
   const tokens = await issueTokens(user);
   return { user: publicUser(user), ...tokens };
 }

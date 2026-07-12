@@ -77,6 +77,7 @@ export function ClusterFiles({ clusterId }: { clusterId: string }) {
           ref={inputRef}
           type="file"
           multiple
+          accept=".jpg,.jpeg,.png,.gif,.webp,.bmp,.pdf,image/jpeg,image/png,image/gif,image/webp,image/bmp,application/pdf"
           style={{ display: 'none' }}
           onChange={(e) => {
             const picked = Array.from(e.target.files ?? []);
