@@ -1,6 +1,6 @@
 
 
-  set -e
+
 
   PROJECT_DIR="/var/www/universityTaskManagement/University-Task--Collaboration-Management-System"
 
