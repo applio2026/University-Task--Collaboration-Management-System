@@ -1,0 +1,100 @@
+name: Deploy - University Task Collaboration Management System
+
+on:
+  push:
+    branches:
+      - production
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to Production Server
+        uses: appleboy/ssh-action@v1.2.0
+
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.PORT }}
+          script_stop: true
+          timeout: 30m
+
+          script: |
+
+            set -e
+
+            PROJECT_DIR="/var/www/universityTaskManagement/University-Task--Collaboration-Management-System"
+
+            echo "======================================"
+            echo "University Task Deployment Started"
+            echo "======================================"
+
+            cd $PROJECT_DIR
+
+            echo ""
+            echo "Fetching latest code..."
+            git fetch origin
+
+            echo ""
+            echo "Resetting production branch..."
+            git reset --hard origin/production
+
+            echo ""
+            echo "Cleaning repository..."
+            git clean -fd
+
+            echo ""
+            echo "Stopping old containers..."
+            docker compose down || true
+
+            echo ""
+            echo "Removing dangling images..."
+            docker image prune -f
+
+            echo ""
+            echo "Building latest images..."
+            docker compose build --no-cache
+
+            echo ""
+            echo "Starting containers..."
+            docker compose up -d
+
+            echo ""
+            echo "Waiting for database..."
+            sleep 20
+
+            echo ""
+            echo "Waiting for backend container..."
+            until docker ps --format '{{.Names}}' | grep -q '^task_backend$'; do
+              sleep 2
+            done
+
+            echo ""
+            echo "Synchronizing Prisma schema..."
+            docker exec task_backend \
+              npx prisma db push --skip-generate --accept-data-loss
+
+            echo ""
+            echo "Running Seed..."
+            docker exec task_backend npm run seed
+
+            echo ""
+            echo "Container Status"
+            docker ps
+
+            echo ""
+            echo "Backend Logs"
+            docker logs task_backend --tail=50
+
+            echo ""
+            echo "Frontend Logs"
+            docker logs task_frontend --tail=20
+
+            echo ""
+            echo "Deployment Completed Successfully"
