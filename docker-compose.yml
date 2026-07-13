@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-uni_secret}
       POSTGRES_DB: ${POSTGRES_DB:-uni_tcms}
     ports:
-      - "${POSTGRES_PORT:-5437}:5432"
+      - "5437:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -41,34 +41,49 @@ services:
       redis:
         condition: service_healthy
     environment:
-      NODE_ENV: ${NODE_ENV:-development}
+      NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-uni}:${POSTGRES_PASSWORD:-uni_secret}@postgres:5432/${POSTGRES_DB:-uni_tcms}?schema=public
       REDIS_URL: redis://redis:6379
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change-me-access-secret}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change-me-refresh-secret}
-      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
-      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-7d}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_ACCESS_TTL: 15m
+      JWT_REFRESH_TTL: 7d
+
+      CORS_ORIGIN: http://103.189.89.128:8093
+
       PORT: 4000
+
     ports:
-      - "${BACKEND_PORT:-4000}:4000"
+      - "4001:4000"
+
     volumes:
       - ./backend/uploads:/app/uploads
-    command: sh -c "npx prisma db push --skip-generate --accept-data-loss && npm run seed && node dist/index.js"
+
+    command: >
+      sh -c "
+      npx prisma generate &&
+      npx prisma db push --skip-generate --accept-data-loss &&
+      npm run seed &&
+      npm start
+      "
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:4000/api}
-        VITE_SOCKET_URL: ${VITE_SOCKET_URL:-http://localhost:4000}
+        VITE_API_URL: http://103.189.89.128:4001/api
+        VITE_SOCKET_URL: http://103.189.89.128:4001
+
     container_name: uni_frontend
     restart: unless-stopped
+
     depends_on:
       - backend
+
     ports:
-      - "${FRONTEND_PORT:-5173}:80"
+      - "8093:80"
 
 volumes:
   postgres-data:

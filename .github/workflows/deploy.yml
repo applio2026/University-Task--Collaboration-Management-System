@@ -58,55 +58,61 @@ jobs:
             echo "Starting containers..."
             docker compose up -d
 
-            echo "Waiting for backend container to start..."
+            echo "Waiting for backend container..."
             for i in $(seq 1 30); do
               if docker compose ps backend | grep -q "Up"; then
                 echo "Backend container is running."
                 break
               fi
+
               echo "Waiting..."
               sleep 2
             done
 
             if ! docker compose ps backend | grep -q "Up"; then
-              echo "❌ Backend container failed to start!"
+              echo "Backend failed to start."
+
               docker compose ps
               docker compose logs backend
+
               exit 1
             fi
 
-            echo "Waiting for API to become responsive..."
+            echo "Waiting for API..."
+
             for i in $(seq 1 30); do
               if curl -fs http://localhost:4001/api/docs >/dev/null 2>&1; then
-                echo "✅ API is responding."
+                echo "API is ready."
                 break
               fi
-              echo "API not ready yet, retrying..."
+
+              echo "API not ready..."
               sleep 2
             done
 
             if ! curl -fs http://localhost:4001/api/docs >/dev/null 2>&1; then
-              echo "❌ API never became ready."
+              echo "Backend API failed."
+
               docker compose ps
-              echo "Backend logs:"
+
+              echo "========== Backend Logs =========="
               docker compose logs backend
-              echo "Frontend logs:"
+
+              echo "========== Frontend Logs =========="
               docker compose logs frontend
+
               exit 1
             fi
 
-            echo "======================================"
-            echo "Container Status"
+            echo "========== Container Status =========="
             docker compose ps
 
-            echo "======================================"
-            echo "Backend Logs"
+            echo "========== Backend Logs =========="
             docker compose logs --tail=50 backend
 
-            echo "======================================"
-            echo "Frontend Logs"
+            echo "========== Frontend Logs =========="
             docker compose logs --tail=20 frontend
 
             echo "======================================"
-            echo "Deployment Completed Successfully!"
+            echo "Deployment Completed Successfully"
             echo "======================================"
