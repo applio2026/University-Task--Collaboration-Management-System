@@ -58,27 +58,55 @@ jobs:
             echo "Starting containers..."
             docker compose up -d
 
-            echo "Waiting for containers..."
-            sleep 30
+            echo "Waiting for backend container to start..."
+            for i in $(seq 1 30); do
+              if docker compose ps backend | grep -q "Up"; then
+                echo "Backend container is running."
+                break
+              fi
+              echo "Waiting..."
+              sleep 2
+            done
 
-            echo "Checking backend..."
             if ! docker compose ps backend | grep -q "Up"; then
-              echo "Backend failed!"
+              echo "❌ Backend container failed to start!"
               docker compose ps
               docker compose logs backend
               exit 1
             fi
 
-            echo "Checking API..."
-            curl --fail http://localhost:4001/api/docs > /dev/null
+            echo "Waiting for API to become responsive..."
+            for i in $(seq 1 30); do
+              if curl -fs http://localhost:4001/api/docs >/dev/null 2>&1; then
+                echo "✅ API is responding."
+                break
+              fi
+              echo "API not ready yet, retrying..."
+              sleep 2
+            done
 
+            if ! curl -fs http://localhost:4001/api/docs >/dev/null 2>&1; then
+              echo "❌ API never became ready."
+              docker compose ps
+              echo "Backend logs:"
+              docker compose logs backend
+              echo "Frontend logs:"
+              docker compose logs frontend
+              exit 1
+            fi
+
+            echo "======================================"
             echo "Container Status"
             docker compose ps
 
+            echo "======================================"
             echo "Backend Logs"
             docker compose logs --tail=50 backend
 
+            echo "======================================"
             echo "Frontend Logs"
             docker compose logs --tail=20 frontend
 
-            echo "Deployment Successful!"
+            echo "======================================"
+            echo "Deployment Completed Successfully!"
+            echo "======================================"
