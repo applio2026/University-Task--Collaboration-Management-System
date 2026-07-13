@@ -1,69 +1,87 @@
-script: |
+name: Deploy - University Task Collaboration Management System
 
-  set -e
+on:
+  push:
+    branches:
+      - production
+  workflow_dispatch:
 
-  PROJECT_DIR="/var/www/universityTaskManagement/University-Task--Collaboration-Management-System"
+concurrency:
+  group: production-deployment
+  cancel-in-progress: true
 
-  echo "======================================"
-  echo "University Task Deployment Started"
-  echo "======================================"
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
 
-  cd "$PROJECT_DIR"
+    steps:
+      - name: Deploy to Production Server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.PORT }}
+          script_stop: true
+          timeout: 30m
 
-  echo "Fetching latest code..."
-  git fetch origin
+          script: |
+            set -e
 
-  echo "Resetting to production..."
-  git reset --hard origin/production
+            PROJECT_DIR="/var/www/universityTaskManagement/University-Task--Collaboration-Management-System"
 
-  echo "Cleaning repository..."
-  git clean -fd
+            echo "======================================"
+            echo "University Task Deployment Started"
+            echo "======================================"
 
-  echo "Stopping old containers..."
-  docker compose down || true
+            cd "$PROJECT_DIR"
 
-  echo "Removing dangling images..."
-  docker image prune -f
+            echo "Fetching latest code..."
+            git fetch origin
 
-  echo "Building latest images..."
-  docker compose build --no-cache
+            echo "Resetting production branch..."
+            git reset --hard origin/production
 
-  echo "Starting containers..."
-  docker compose up -d
+            echo "Cleaning repository..."
+            git clean -fd
 
-  echo "Waiting for backend to start..."
+            echo "Stopping old containers..."
+            docker compose down || true
 
-  timeout=120
-  elapsed=0
+            echo "Removing dangling images..."
+            docker image prune -f
 
-  until docker compose ps backend | grep -q "Up"; do
-    sleep 2
-    elapsed=$((elapsed+2))
+            echo "Building latest images..."
+            docker compose build --no-cache
 
-    if [ $elapsed -ge $timeout ]; then
-      echo "Backend failed to start!"
-      docker compose ps
-      docker compose logs backend
-      exit 1
-    fi
-  done
+            echo "Starting containers..."
+            docker compose up -d
 
-  echo "Backend is running."
+            echo "Waiting 20 seconds for containers..."
+            sleep 20
 
-  echo "Synchronizing Prisma schema..."
-  docker compose exec -T backend \
-    npx prisma db push --skip-generate --accept-data-loss
+            echo "Checking backend container..."
+            if ! docker compose ps backend | grep -q "Up"; then
+              echo "Backend failed to start!"
+              docker compose ps
+              docker compose logs backend
+              exit 1
+            fi
 
-  echo "Running database seed..."
-  docker compose exec -T backend npm run seed
+            echo "Running Prisma DB Push..."
+            docker compose exec -T backend \
+              npx prisma db push --skip-generate --accept-data-loss
 
-  echo "Container status:"
-  docker compose ps
+            echo "Running Seed..."
+            docker compose exec -T backend npm run seed
 
-  echo "Backend logs:"
-  docker compose logs --tail=50 backend
+            echo "Container Status"
+            docker compose ps
 
-  echo "Frontend logs:"
-  docker compose logs --tail=20 frontend
+            echo "Backend Logs"
+            docker compose logs --tail=50 backend
 
-  echo "Deployment completed successfully!"
+            echo "Frontend Logs"
+            docker compose logs --tail=20 frontend
+
+            echo "Deployment completed successfully!"
