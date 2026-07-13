@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 name: Deploy - University Task Collaboration Management System
 
 on:
@@ -5,6 +6,11 @@ on:
     branches:
       - production
   workflow_dispatch:
+=======
+
+
+
+>>>>>>> a940f28b3067f262345da01d73c1e514df4d75fa
 
 concurrency:
   group: production-deployment
