@@ -1,25 +1,48 @@
-# ---- Build stage ----
-FROM node:20-alpine AS build
+# ---------- Build Stage ----------
+FROM node:20-bookworm-slim AS build
+
+RUN apt-get update && \
+    apt-get install -y openssl && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
+
 COPY package*.json ./
+
 RUN npm install
+
 COPY prisma ./prisma
+
 RUN npx prisma generate
+
 COPY tsconfig.json ./
 COPY src ./src
+
 RUN npm run build
 
-# ---- Runtime stage ----
-FROM node:20-alpine AS runtime
+# ---------- Runtime Stage ----------
+FROM node:20-bookworm-slim
+
+RUN apt-get update && \
+    apt-get install -y openssl && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
+
 ENV NODE_ENV=production
+
 COPY package*.json ./
-RUN npm install --omit=dev
+
+RUN npm install
+
 COPY prisma ./prisma
+
 RUN npx prisma generate
+
 COPY --from=build /app/dist ./dist
-# tsx is needed to run the TypeScript seed script at container start
-RUN npm install tsx --no-save
+
 RUN mkdir -p uploads
+
 EXPOSE 4000
-CMD ["node", "dist/index.js"]
+
+CMD ["node","dist/index.js"]
