@@ -81,7 +81,7 @@ jobs:
             echo "Waiting for API..."
 
             for i in $(seq 1 30); do
-              if curl -fs http://localhost:4001/api/docs >/dev/null 2>&1; then
+              if curl -fs http://127.0.0.1:4001/api/health >/dev/null 2>&1; then
                 echo "API is ready."
                 break
               fi
@@ -90,7 +90,7 @@ jobs:
               sleep 2
             done
 
-            if ! curl -fs http://localhost:4001/api/docs >/dev/null 2>&1; then
+            if ! curl -fs http://127.0.0.1:4001/api/health >/dev/null 2>&1; then
               echo "Backend API failed."
 
               docker compose ps
