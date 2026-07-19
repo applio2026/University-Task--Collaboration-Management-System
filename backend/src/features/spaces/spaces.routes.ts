@@ -27,31 +27,10 @@ router.get(
   }),
 );
 
-/**
- * @openapi
- * /spaces:
- *   post:
- *     tags: [Spaces]
- *     summary: Create a space (super admin only)
- *     security: [{ bearerAuth: [] }]
- */
-router.post(
-  '/',
-  requireSuperAdmin,
-  validate({
-    body: z.object({
-      name: z.string().min(2),
-      description: z.string().optional(),
-      color: z.string().optional(),
-      universityId: z.string().optional(),
-    }),
-  }),
-  asyncHandler(async (req, res) => {
-    const space = await service.createSpace(req.body);
-    writeAudit(req, 'SPACE_CREATED', 'Space', space.id, { name: space.name });
-    res.status(201).json({ space });
-  }),
-);
+// Space creation now happens under its parent workspace:
+// POST /workspaces/:workspaceId/spaces (see workspaces.routes.ts) — a Space
+// can no longer exist without a workspace, so there is no bare "create a space"
+// endpoint here anymore.
 
 /**
  * @openapi

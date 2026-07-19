@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { api } from '../lib/api';
 import type { MiniUser } from '../types';
-import { Avatar } from './ui';
+import { Avatar, clusterRoleLabel } from './ui';
 
 interface Member {
   role: string; // STUDENT | TEACHING_ASSISTANT | CLUSTER_ADMIN
@@ -12,15 +12,9 @@ interface Member {
 
 const ROLE_ORDER: Record<string, number> = { CLUSTER_ADMIN: 0, TEACHING_ASSISTANT: 1, STUDENT: 2 };
 
-function roleLabel(role: string) {
-  if (role === 'CLUSTER_ADMIN') return 'Faculty';
-  if (role === 'TEACHING_ASSISTANT') return 'Teaching Assistant';
-  return 'Student';
-}
-
 /**
  * Cluster members tab. Anyone in the cluster can see the roster; everyone except
- * a plain Student can enrol a new student directly here.
+ * a plain User can enrol a new user directly here.
  */
 export function ClusterMembers({
   clusterId,
@@ -151,7 +145,7 @@ export function ClusterMembers({
                     <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>{m.user.email}</div>
                   )}
                 </div>
-                <span className="chip">{roleLabel(m.role)}</span>
+                <span className="chip">{clusterRoleLabel(m.role)}</span>
                 {canManageRoles && (
                   <button
                     className="member-chip-x"

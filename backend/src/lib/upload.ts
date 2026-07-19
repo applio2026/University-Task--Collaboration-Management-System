@@ -21,7 +21,7 @@ const storage = multer.diskStorage({
 // needs — using an ALLOW-list (an executable/script deny-list is unsafe: any type
 // not on it slips through). Notably absent: SVG, which is XML that can carry
 // <script>, so it is treated as executable content and rejected.
-export const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.pdf']);
+export const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.pdf', '.txt']);
 const ALLOWED_MIME_TYPES = new Set([
   'image/jpeg',
   'image/png',
@@ -29,9 +29,13 @@ const ALLOWED_MIME_TYPES = new Set([
   'image/webp',
   'image/bmp',
   'application/pdf',
+  'text/plain',
 ]);
 
-const ALLOWED_MESSAGE = 'Only image files (JPEG, PNG, GIF, WebP, BMP) or PDF documents can be uploaded.';
+const ALLOWED_MESSAGE =
+  'Only image files (JPEG, PNG, GIF, WebP, BMP), PDF documents, or plain-text (.txt) files can be uploaded.';
+const UNSAFE_TEXT_MESSAGE =
+  'This .txt file was rejected: it must be plain text with no executable or script code (e.g. a shebang, batch/PowerShell/PHP/HTML script, or binary content).';
 
 /** Shared Multer instance: disk storage, 20 MB per file, up to 10 files. */
 export const upload = multer({
@@ -82,10 +86,51 @@ function sniffFileType(filePath: string): 'jpeg' | 'png' | 'gif' | 'webp' | 'bmp
 }
 
 /**
+ * Inspects a .txt upload's real content. A plain-text note is fine; an executable
+ * or script disguised as text is not. Returns an error message if unsafe, else null.
+ * Heuristics: reject binaries (NUL bytes / a high ratio of control bytes) and files
+ * carrying obvious executable-code markers (Unix shebang, PE/ELF headers, PHP/HTML
+ * script tags). Files are downloaded as attachments, so this is defence-in-depth.
+ */
+function inspectTextFile(filePath: string): string | null {
+  let fd: number | null = null;
+  try {
+    fd = fs.openSync(filePath, 'r');
+    const size = Math.min(fs.fstatSync(fd).size, 512 * 1024); // scan up to 512 KB
+    const buf = Buffer.alloc(size);
+    const read = fs.readSync(fd, buf, 0, size, 0);
+    const data = buf.subarray(0, read);
+
+    // 1) Must be genuine text: no NUL bytes, and control characters (other than
+    // tab / LF / CR) must be rare — binaries and executables fail this.
+    let control = 0;
+    for (const b of data) {
+      if (b === 0) return UNSAFE_TEXT_MESSAGE;
+      if (b === 0x7f || (b < 0x20 && b !== 0x09 && b !== 0x0a && b !== 0x0d)) control += 1;
+    }
+    if (data.length > 0 && control / data.length > 0.05) return UNSAFE_TEXT_MESSAGE;
+
+    // 2) Reject obvious executable / script content.
+    if (data[0] === 0x23 && data[1] === 0x21) return UNSAFE_TEXT_MESSAGE; // "#!" shebang
+    if (data[0] === 0x4d && data[1] === 0x5a) return UNSAFE_TEXT_MESSAGE; // "MZ" PE header
+    if (data[0] === 0x7f && data.subarray(1, 4).toString('latin1') === 'ELF') return UNSAFE_TEXT_MESSAGE;
+    const lower = data.toString('latin1').toLowerCase();
+    if (lower.includes('<?php') || lower.includes('<script')) return UNSAFE_TEXT_MESSAGE;
+
+    return null;
+  } catch {
+    return UNSAFE_TEXT_MESSAGE;
+  } finally {
+    if (fd !== null) fs.closeSync(fd);
+  }
+}
+
+/**
  * Middleware to run immediately after `upload.array('files')` / `upload.single`.
- * Confirms every stored file's real content is an allowed image/PDF; on any
- * mismatch it deletes ALL files from the request and rejects with 400, so no
- * disguised executable is ever persisted or exposed for download.
+ * Confirms every stored file's real content matches an allowed type — images/PDF
+ * by magic bytes, and .txt as safe plain text (no embedded executable/script code).
+ * On any mismatch it deletes ALL files from the request and rejects with 400, so
+ * nothing disguised is ever persisted or exposed for download.
  */
 export function verifyUploadedFiles(req: Request, _res: Response, next: NextFunction): void {
   const files = [
@@ -96,11 +141,22 @@ export function verifyUploadedFiles(req: Request, _res: Response, next: NextFunc
     next();
     return;
   }
-  const bad = files.find((f) => sniffFileType(f.path) === null);
-  if (bad) {
+  const reject = (message: string) => {
     for (const f of files) fs.rm(f.path, { force: true }, () => undefined);
-    next(badRequest(ALLOWED_MESSAGE));
-    return;
+    next(badRequest(message));
+  };
+  for (const f of files) {
+    const ext = path.extname(f.originalname).toLowerCase();
+    if (ext === '.txt') {
+      const problem = inspectTextFile(f.path);
+      if (problem) {
+        reject(problem);
+        return;
+      }
+    } else if (sniffFileType(f.path) === null) {
+      reject(ALLOWED_MESSAGE);
+      return;
+    }
   }
   next();
 }

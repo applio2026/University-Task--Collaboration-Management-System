@@ -50,14 +50,18 @@ router.get(
  * /users/{userId}/memberships:
  *   get:
  *     tags: [Users]
- *     summary: A user's current space & cluster memberships (super admin only)
+ *     summary: A user's current workspace, space & cluster memberships (super admin only)
  *     security: [{ bearerAuth: [] }]
  */
 router.get(
   '/:userId/memberships',
   requireSuperAdmin,
   asyncHandler(async (req, res) => {
-    const [spaceMemberships, clusterMemberships] = await Promise.all([
+    const [workspaceMemberships, spaceMemberships, clusterMemberships] = await Promise.all([
+      prisma.workspaceMembership.findMany({
+        where: { userId: req.params.userId },
+        include: { workspace: { select: { id: true, name: true, color: true } } },
+      }),
       prisma.spaceMembership.findMany({
         where: { userId: req.params.userId },
         include: { space: { select: { id: true, name: true, color: true } } },
@@ -68,6 +72,12 @@ router.get(
       }),
     ]);
     res.json({
+      workspaces: workspaceMemberships.map((m) => ({
+        id: m.workspace.id,
+        name: m.workspace.name,
+        color: m.workspace.color,
+        role: m.role,
+      })),
       spaces: spaceMemberships.map((m) => ({
         id: m.space.id,
         name: m.space.name,

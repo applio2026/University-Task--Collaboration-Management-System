@@ -131,7 +131,9 @@ router.post(
     let data: Record<string, unknown>;
     if (op === 'status') {
       if (!value || !(value in TaskStatus)) throw badRequest('Invalid status value');
-      data = { status: value };
+      // Mirrors the single-task update: track/clear completedAt so the 15-day
+      // auto-archive sweep works for tasks completed via bulk actions too.
+      data = { status: value, completedAt: value === TaskStatus.COMPLETED ? new Date() : null };
     } else if (op === 'priority') {
       if (!value || !(value in TaskPriority)) throw badRequest('Invalid priority value');
       data = { priority: value };

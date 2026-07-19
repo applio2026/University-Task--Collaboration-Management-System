@@ -217,7 +217,7 @@ export function SubmissionsPanel({ taskId }: { taskId: string }) {
           </div>
           <div className="field" style={{ marginBottom: 8 }}>
             <label>Files</label>
-            <input ref={fileRef} className="input" type="file" multiple accept=".jpg,.jpeg,.png,.gif,.webp,.bmp,.pdf,image/jpeg,image/png,image/gif,image/webp,image/bmp,application/pdf" onChange={(e) => setFiles(Array.from(e.target.files ?? []))} />
+            <input ref={fileRef} className="input" type="file" multiple accept=".jpg,.jpeg,.png,.gif,.webp,.bmp,.pdf,.txt,image/jpeg,image/png,image/gif,image/webp,image/bmp,application/pdf,text/plain" onChange={(e) => setFiles(Array.from(e.target.files ?? []))} />
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <button

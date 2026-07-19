@@ -1,10 +1,11 @@
 import { useEffect } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
-import { useAuth } from './store/auth';
+import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
+import { useAuth, touchActivity, isIdleExpired } from './store/auth';
 import { AppLayout } from './components/AppLayout';
 import { LoginPage } from './pages/LoginPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { ClusterPage } from './pages/ClusterPage';
+import { WorkspacePage } from './pages/WorkspacePage';
 import { SpacePage } from './pages/SpacePage';
 import { DashboardPage } from './pages/DashboardPage';
 import { CalendarPage } from './pages/CalendarPage';
@@ -23,12 +24,56 @@ function FullScreenLoader() {
   );
 }
 
+// Auto-logout after 2 minutes of inactivity. User interaction resets the timer
+// (throttled); a short poll checks whether the idle limit has been exceeded and,
+// if so, logs out and returns to the login screen.
+function useIdleLogout(active: boolean) {
+  const logout = useAuth((s) => s.logout);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!active) return;
+    touchActivity();
+
+    let lastWrite = Date.now();
+    const onActivity = () => {
+      const now = Date.now();
+      if (now - lastWrite > 5000) {
+        lastWrite = now;
+        touchActivity();
+      }
+    };
+    const events: (keyof WindowEventMap)[] = [
+      'mousemove',
+      'mousedown',
+      'keydown',
+      'scroll',
+      'touchstart',
+      'click',
+    ];
+    events.forEach((e) => window.addEventListener(e, onActivity, { passive: true }));
+
+    const interval = window.setInterval(() => {
+      if (isIdleExpired()) {
+        void logout().finally(() => navigate('/login', { replace: true }));
+      }
+    }, 10_000);
+
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, onActivity));
+      window.clearInterval(interval);
+    };
+  }, [active, logout, navigate]);
+}
+
 export default function App() {
   const { status, bootstrap, user } = useAuth();
 
   useEffect(() => {
     bootstrap();
   }, [bootstrap]);
+
+  useIdleLogout(status === 'authenticated');
 
   if (status === 'idle' || status === 'loading') return <FullScreenLoader />;
 
@@ -46,6 +91,7 @@ export default function App() {
       <Route element={<AppLayout />}>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/dashboard" element={<Navigate to="/" replace />} />
+        <Route path="/workspaces/:workspaceId" element={<WorkspacePage />} />
         <Route path="/spaces/:spaceId" element={<SpacePage />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/reports" element={<ReportsPage />} />

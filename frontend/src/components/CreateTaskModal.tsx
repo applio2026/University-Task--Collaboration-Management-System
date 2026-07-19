@@ -217,7 +217,7 @@ export function CreateTaskModal({
             className="input"
             type="file"
             multiple
-            accept=".jpg,.jpeg,.png,.gif,.webp,.bmp,.pdf,image/jpeg,image/png,image/gif,image/webp,image/bmp,application/pdf"
+            accept=".jpg,.jpeg,.png,.gif,.webp,.bmp,.pdf,.txt,image/jpeg,image/png,image/gif,image/webp,image/bmp,application/pdf,text/plain"
             onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
           />
           {files.length > 0 && (

@@ -4,17 +4,9 @@ import axios from 'axios';
 import { api } from '../lib/api';
 import { Modal } from './Modal';
 
-const COLORS = ['#0F766E', '#2563EB', '#7C3AED', '#B45309', '#BE123C', '#16A34A', '#0891B2', '#DB2777'];
+const COLORS = ['#334155', '#0F766E', '#2563EB', '#7C3AED', '#B45309', '#BE123C', '#16A34A', '#DB2777'];
 
-export function CreateSpaceModal({
-  workspaceId,
-  workspaceName,
-  onClose,
-}: {
-  workspaceId: string;
-  workspaceName: string;
-  onClose: () => void;
-}) {
+export function CreateWorkspaceModal({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -23,22 +15,16 @@ export function CreateSpaceModal({
 
   const create = useMutation({
     mutationFn: async () =>
-      api.post(`/workspaces/${workspaceId}/spaces`, {
-        name: name.trim(),
-        description: description.trim() || undefined,
-        color,
-      }),
+      api.post('/workspaces', { name: name.trim(), description: description.trim() || undefined, color }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['spaces'] });
-      qc.invalidateQueries({ queryKey: ['workspace-spaces', workspaceId] });
       qc.invalidateQueries({ queryKey: ['workspaces'] });
       onClose();
     },
     onError: (err) => {
       if (axios.isAxiosError(err) && err.response?.status === 403) {
-        setError('Only a Workspace Admin (or Super Admin) can create spaces here.');
+        setError('Only a Super Admin can create workspaces.');
       } else {
-        setError('Could not create the space. Please try again.');
+        setError('Could not create the workspace. Please try again.');
       }
     },
   });
@@ -54,7 +40,7 @@ export function CreateSpaceModal({
   }
 
   return (
-    <Modal title={`New Space in ${workspaceName}`} onClose={onClose}>
+    <Modal title="New Workspace" onClose={onClose}>
       <form onSubmit={onSubmit}>
         <div className="field">
           <label>Name</label>
@@ -62,7 +48,7 @@ export function CreateSpaceModal({
             className="input"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Electrical Engineering"
+            placeholder="e.g. Placement Cell 2027"
             autoFocus
           />
         </div>
@@ -97,6 +83,10 @@ export function CreateSpaceModal({
           </div>
         </div>
 
+        <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          Only people you grant access to will be able to see this workspace or anything inside it.
+        </p>
+
         {error && <p className="form-error">{error}</p>}
 
         <div className="modal-actions">
@@ -104,7 +94,7 @@ export function CreateSpaceModal({
             Cancel
           </button>
           <button type="submit" className="btn btn-primary" disabled={create.isPending}>
-            {create.isPending ? 'Creating…' : 'Create space'}
+            {create.isPending ? 'Creating…' : 'Create workspace'}
           </button>
         </div>
       </form>

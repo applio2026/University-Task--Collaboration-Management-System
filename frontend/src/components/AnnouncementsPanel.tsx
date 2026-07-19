@@ -45,7 +45,7 @@ export function AnnouncementsPanel({ clusterId, canPost }: { clusterId: string; 
     onError: (err) => {
       setError(
         axios.isAxiosError(err) && err.response?.status === 403
-          ? 'You need Teaching Assistant or Faculty rights to post.'
+          ? 'You need Manager or Faculty rights to post.'
           : 'Could not post the announcement.',
       );
     },

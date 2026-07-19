@@ -1,4 +1,5 @@
 export type SystemRole = 'SUPER_ADMIN' | 'USER';
+export type WorkspaceRole = 'WORKSPACE_ADMIN' | 'MEMBER';
 export type ClusterRole = 'CLUSTER_ADMIN' | 'TEACHING_ASSISTANT' | 'STUDENT';
 export type TaskStatus = 'OPEN' | 'IN_PROGRESS' | 'REVIEW' | 'COMPLETED' | 'REJECTED' | 'LATE';
 export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
@@ -20,11 +21,20 @@ export interface MiniUser {
   email?: string;
 }
 
+export interface Workspace {
+  id: string;
+  name: string;
+  color: string;
+  description?: string;
+  _count?: { spaces: number; memberships: number };
+}
+
 export interface Space {
   id: string;
   name: string;
   color: string;
   description?: string;
+  workspace?: { id: string; name: string; color: string };
   _count?: { clusters: number; memberships: number };
 }
 
@@ -67,6 +77,7 @@ export interface Task {
 export interface OverviewGroup {
   cluster: { id: string; name: string; color: string; kind: string };
   space: { id: string; name: string; color: string };
+  workspace: { id: string; name: string; color: string };
   tasks: Task[];
 }
 

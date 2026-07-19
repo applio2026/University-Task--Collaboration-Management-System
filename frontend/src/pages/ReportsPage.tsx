@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import type { OverviewGroup, TaskPriority, TaskStatus } from '../types';
@@ -30,13 +30,27 @@ function BarRow({ label, value, max, color }: { label: string; value: number; ma
 }
 
 export function ReportsPage() {
+  const [workspaceId, setWorkspaceId] = useState('');
+
   const { data: groups, isLoading } = useQuery({
     queryKey: ['overview'],
     queryFn: async () => (await api.get('/tasks/overview')).data.groups as OverviewGroup[],
   });
 
+  const workspaceOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    (groups ?? []).forEach((g) => map.set(g.workspace.id, g.workspace.name));
+    return [...map.entries()];
+  }, [groups]);
+
+  const scopedGroups = useMemo(
+    () => (groups ?? []).filter((g) => !workspaceId || g.workspace.id === workspaceId),
+    [groups, workspaceId],
+  );
+
   const report = useMemo(() => {
-    const all = (groups ?? []).flatMap((g) => g.tasks);
+    const groups = scopedGroups;
+    const all = groups.flatMap((g) => g.tasks);
     const now = Date.now();
 
     const byStatus = Object.fromEntries(STATUS_ORDER.map((s) => [s, 0])) as Record<TaskStatus, number>;
@@ -80,7 +94,7 @@ export function ReportsPage() {
       byPriority,
       perCluster,
     };
-  }, [groups]);
+  }, [scopedGroups]);
 
   if (isLoading) {
     return (
@@ -97,6 +111,16 @@ export function ReportsPage() {
     <div>
       <div className="group-head" style={{ marginBottom: 14 }}>
         <h2 style={{ margin: 0 }}>Reports &amp; Analytics</h2>
+        <div className="field" style={{ marginLeft: 'auto', marginBottom: 0 }}>
+          <select className="select" value={workspaceId} onChange={(e) => setWorkspaceId(e.target.value)}>
+            <option value="">All workspaces</option>
+            {workspaceOptions.map(([id, name]) => (
+              <option key={id} value={id}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* KPI headline numbers */}

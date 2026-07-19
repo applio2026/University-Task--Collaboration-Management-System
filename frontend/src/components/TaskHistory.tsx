@@ -43,6 +43,8 @@ function describe(a: Activity): string {
       return 'added a comment';
     case 'REPLY_ADDED':
       return 'replied to a comment';
+    case 'TASK_AUTO_ARCHIVED':
+      return 'was automatically archived (completed 15+ days ago)';
     case 'TASK_UPDATED': {
       const changes = (m.changes as Change[] | undefined) ?? [];
       if (changes.length === 0) return 'updated this task';

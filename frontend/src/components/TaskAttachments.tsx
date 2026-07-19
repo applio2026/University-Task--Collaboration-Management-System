@@ -77,7 +77,7 @@ export function TaskAttachments({ taskId }: { taskId: string }) {
           ref={inputRef}
           type="file"
           multiple
-          accept=".jpg,.jpeg,.png,.gif,.webp,.bmp,.pdf,image/jpeg,image/png,image/gif,image/webp,image/bmp,application/pdf"
+          accept=".jpg,.jpeg,.png,.gif,.webp,.bmp,.pdf,.txt,image/jpeg,image/png,image/gif,image/webp,image/bmp,application/pdf,text/plain"
           style={{ display: 'none' }}
           onChange={(e) => {
             const files = Array.from(e.target.files ?? []);

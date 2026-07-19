@@ -3,6 +3,7 @@ import { createApp } from './app';
 import { env } from './config/env';
 import { initSocket } from './realtime/io';
 import { prisma } from './lib/prisma';
+import { startAutoArchiveJob } from './jobs/autoArchive';
 
 async function main() {
   const app = createApp();
@@ -15,6 +16,8 @@ async function main() {
     // eslint-disable-next-line no-console
     console.log(`📚 Swagger UI at http://localhost:${env.port}/api/docs`);
   });
+
+  startAutoArchiveJob();
 
   const shutdown = async () => {
     // eslint-disable-next-line no-console

@@ -3,16 +3,17 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuth } from '../store/auth';
-import type { Cluster, Space } from '../types';
+import type { Cluster, Space, Workspace } from '../types';
 import { initials } from './ui';
 import { useOrgName } from '../lib/useOrgName';
+import { CreateWorkspaceModal } from './CreateWorkspaceModal';
 import { CreateSpaceModal } from './CreateSpaceModal';
 import { CreateClusterModal } from './CreateClusterModal';
 
-function useSpaces() {
+function useWorkspaces() {
   return useQuery({
-    queryKey: ['spaces'],
-    queryFn: async () => (await api.get('/spaces')).data.spaces as Space[],
+    queryKey: ['workspaces'],
+    queryFn: async () => (await api.get('/workspaces')).data.workspaces as Workspace[],
   });
 }
 
@@ -21,8 +22,8 @@ function ClusterList({ spaceId }: { spaceId: string }) {
     queryKey: ['clusters', spaceId],
     queryFn: async () => (await api.get(`/spaces/${spaceId}/clusters`)).data.clusters as Cluster[],
   });
-  if (isLoading) return <div style={{ padding: '4px 0 4px 34px', color: 'var(--text-faint)', fontSize: 12 }}>…</div>;
-  if (!data?.length) return <div style={{ padding: '4px 0 4px 34px', color: 'var(--text-faint)', fontSize: 12 }}>No clusters</div>;
+  if (isLoading) return <div style={{ padding: '4px 0 4px 58px', color: 'var(--text-faint)', fontSize: 12 }}>…</div>;
+  if (!data?.length) return <div style={{ padding: '4px 0 4px 58px', color: 'var(--text-faint)', fontSize: 12 }}>No clusters</div>;
   return (
     <div>
       {data.map((c) => (
@@ -30,7 +31,7 @@ function ClusterList({ spaceId }: { spaceId: string }) {
           key={c.id}
           to={`/clusters/${c.id}`}
           className="side-item"
-          style={({ isActive }) => ({ paddingLeft: 34, ...(isActive ? { background: 'var(--surface-2)', color: 'var(--text)' } : {}) })}
+          style={({ isActive }) => ({ paddingLeft: 58, ...(isActive ? { background: 'var(--surface-2)', color: 'var(--text)' } : {}) })}
         >
           <span className="badge-square" style={{ background: c.color, width: 16, height: 16, fontSize: 9 }}>
             {initials(c.name)}
@@ -55,7 +56,7 @@ function SpaceRow({
   const navigate = useNavigate();
   return (
     <div>
-      <div className="side-item" style={{ padding: '4px 6px', gap: 4 }}>
+      <div className="side-item" style={{ padding: '4px 6px 4px 24px', gap: 4 }}>
         <button
           title={open ? 'Collapse' : 'Expand'}
           onClick={() => setOpen((o) => !o)}
@@ -90,13 +91,104 @@ function SpaceRow({
   );
 }
 
+function SpaceList({
+  workspaceId,
+  canAddSpace,
+  canAddCluster,
+  onAddCluster,
+}: {
+  workspaceId: string;
+  canAddSpace: boolean;
+  canAddCluster: boolean;
+  onAddCluster: (space: Space) => void;
+}) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['workspace-spaces', workspaceId],
+    queryFn: async () => (await api.get(`/workspaces/${workspaceId}/spaces`)).data.spaces as Space[],
+  });
+  if (isLoading) return <div style={{ padding: '4px 0 4px 34px', color: 'var(--text-faint)', fontSize: 12 }}>…</div>;
+  if (!data?.length)
+    return (
+      <div style={{ padding: '4px 0 4px 34px', color: 'var(--text-faint)', fontSize: 12 }}>
+        No spaces{canAddSpace ? ' yet' : ''}
+      </div>
+    );
+  return (
+    <div>
+      {data.map((s) => (
+        <SpaceRow key={s.id} space={s} canAddCluster={canAddCluster} onAddCluster={() => onAddCluster(s)} />
+      ))}
+    </div>
+  );
+}
+
+function WorkspaceRow({
+  workspace,
+  canAddSpace,
+  canAddCluster,
+  onAddSpace,
+  onAddCluster,
+}: {
+  workspace: Workspace;
+  canAddSpace: boolean;
+  canAddCluster: boolean;
+  onAddSpace: () => void;
+  onAddCluster: (space: Space) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  const navigate = useNavigate();
+  return (
+    <div>
+      <div className="side-item" style={{ padding: '4px 6px', gap: 4 }}>
+        <button
+          title={open ? 'Collapse' : 'Expand'}
+          onClick={() => setOpen((o) => !o)}
+          style={{ width: 14, border: 'none', background: 'none', color: 'var(--text-faint)', cursor: 'pointer', padding: 0 }}
+        >
+          {open ? '▾' : '▸'}
+        </button>
+        <button
+          onClick={() => navigate(`/workspaces/${workspace.id}`)}
+          style={{ display: 'flex', alignItems: 'center', gap: 9, flex: 1, minWidth: 0, border: 'none', background: 'none', color: 'inherit', cursor: 'pointer', padding: 0 }}
+        >
+          <span className="badge-square" style={{ background: workspace.color }}>
+            {initials(workspace.name)}
+          </span>
+          <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
+            {workspace.name}
+          </span>
+          <span style={{ color: 'var(--text-faint)', fontSize: 11 }}>{workspace._count?.spaces ?? 0}</span>
+        </button>
+        {canAddSpace && (
+          <button
+            title="New space"
+            onClick={onAddSpace}
+            style={{ border: 'none', background: 'none', color: 'var(--text-faint)', cursor: 'pointer', fontSize: 15, padding: '0 2px' }}
+          >
+            ＋
+          </button>
+        )}
+      </div>
+      {open && (
+        <SpaceList
+          workspaceId={workspace.id}
+          canAddSpace={canAddSpace}
+          canAddCluster={canAddCluster}
+          onAddCluster={onAddCluster}
+        />
+      )}
+    </div>
+  );
+}
+
 export function Sidebar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const { data: spaces } = useSpaces();
+  const { data: workspaces } = useWorkspaces();
   const isSuper = user?.systemRole === 'SUPER_ADMIN';
   const orgName = useOrgName();
-  const [creatingSpace, setCreatingSpace] = useState(false);
+  const [creatingWorkspace, setCreatingWorkspace] = useState(false);
+  const [spaceWorkspace, setSpaceWorkspace] = useState<Workspace | null>(null);
   const [clusterSpace, setClusterSpace] = useState<Space | null>(null);
 
   return (
@@ -141,11 +233,11 @@ export function Sidebar() {
       </nav>
 
       <div className="side-section-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span>Spaces</span>
+        <span>Workspaces</span>
         {isSuper && (
           <button
-            title="New space"
-            onClick={() => setCreatingSpace(true)}
+            title="New workspace"
+            onClick={() => setCreatingWorkspace(true)}
             style={{ border: 'none', background: 'none', color: 'var(--text-faint)', cursor: 'pointer', fontSize: 15, padding: 0 }}
           >
             ＋
@@ -153,13 +245,31 @@ export function Sidebar() {
         )}
       </div>
       <div style={{ padding: '0 8px' }}>
-        {spaces?.map((s) => (
-          <SpaceRow key={s.id} space={s} canAddCluster={isSuper} onAddCluster={() => setClusterSpace(s)} />
+        {workspaces?.map((w) => (
+          <WorkspaceRow
+            key={w.id}
+            workspace={w}
+            canAddSpace={isSuper}
+            canAddCluster={isSuper}
+            onAddSpace={() => setSpaceWorkspace(w)}
+            onAddCluster={setClusterSpace}
+          />
         ))}
-        {!spaces?.length && <div style={{ color: 'var(--text-faint)', fontSize: 12, padding: 8 }}>No spaces yet</div>}
+        {!workspaces?.length && (
+          <div style={{ color: 'var(--text-faint)', fontSize: 12, padding: 8 }}>
+            No workspaces yet{isSuper ? ' — create one to get started.' : ' you have access to.'}
+          </div>
+        )}
       </div>
 
-      {creatingSpace && <CreateSpaceModal onClose={() => setCreatingSpace(false)} />}
+      {creatingWorkspace && <CreateWorkspaceModal onClose={() => setCreatingWorkspace(false)} />}
+      {spaceWorkspace && (
+        <CreateSpaceModal
+          workspaceId={spaceWorkspace.id}
+          workspaceName={spaceWorkspace.name}
+          onClose={() => setSpaceWorkspace(null)}
+        />
+      )}
       {clusterSpace && (
         <CreateClusterModal
           spaceId={clusterSpace.id}

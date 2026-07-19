@@ -10,6 +10,7 @@ import { mountSwagger } from './docs/swagger';
 
 import authRoutes from './features/auth/auth.routes';
 import userRoutes from './features/users/users.routes';
+import workspaceRoutes from './features/workspaces/workspaces.routes';
 import spaceRoutes from './features/spaces/spaces.routes';
 import clusterRoutes from './features/clusters/clusters.routes';
 import taskRoutes from './features/tasks/tasks.routes';
@@ -44,7 +45,9 @@ export function createApp(): Express {
   app.use('/api/auth', authLimiter, authRoutes);
   app.use('/api/users', userRoutes);
   app.use('/api/spaces', spaceRoutes);
-  // Cluster & task routers use absolute paths (/clusters, /spaces/:id/clusters, /tasks…)
+  // Workspace, cluster & task routers use absolute paths (/workspaces, /clusters,
+  // /spaces/:id/clusters, /tasks…)
+  app.use('/api', workspaceRoutes);
   app.use('/api', clusterRoutes);
   app.use('/api', taskRoutes);
   app.use('/api', announcementRoutes);

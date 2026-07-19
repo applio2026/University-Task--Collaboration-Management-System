@@ -36,7 +36,7 @@ export function AssigneeManager({
     onError: (err) => {
       setError(
         axios.isAxiosError(err) && err.response?.status === 403
-          ? 'Only Teaching Assistants or Faculty can set assignees.'
+          ? 'Only Managers or Faculty can set assignees.'
           : 'Could not update assignees.',
       );
     },

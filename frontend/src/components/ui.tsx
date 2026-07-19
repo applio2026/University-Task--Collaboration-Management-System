@@ -94,3 +94,14 @@ export function statusLabel(status: TaskStatus) {
 export function statusColor(status: TaskStatus) {
   return STATUS_META[status].color;
 }
+
+// Display names for cluster roles. The internal enum codes are unchanged
+// (CLUSTER_ADMIN / TEACHING_ASSISTANT / STUDENT); only what users see differs.
+const CLUSTER_ROLE_LABELS: Record<string, string> = {
+  CLUSTER_ADMIN: 'Faculty',
+  TEACHING_ASSISTANT: 'Manager',
+  STUDENT: 'User',
+};
+export function clusterRoleLabel(role: string): string {
+  return CLUSTER_ROLE_LABELS[role] ?? role.replace(/_/g, ' ');
+}

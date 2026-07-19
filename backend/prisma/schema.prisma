@@ -20,6 +20,11 @@ enum SystemRole {
   USER // ordinary user; effective privileges derive from memberships
 }
 
+enum WorkspaceRole {
+  WORKSPACE_ADMIN
+  MEMBER
+}
+
 enum SpaceRole {
   SPACE_ADMIN
   MEMBER
@@ -101,8 +106,9 @@ model University {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  spaces Space[]
-  users  User[]
+  workspaces Workspace[]
+  spaces     Space[]
+  users      User[]
 }
 
 model User {
@@ -123,9 +129,10 @@ model User {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  spaceMemberships   SpaceMembership[]
-  clusterMemberships ClusterMembership[]
-  refreshTokens      RefreshToken[]
+  workspaceMemberships WorkspaceMembership[]
+  spaceMemberships     SpaceMembership[]
+  clusterMemberships   ClusterMembership[]
+  refreshTokens        RefreshToken[]
 
   createdTasks    Task[]           @relation("TaskCreator")
   assignedTasks   TaskAssignee[]
@@ -157,10 +164,43 @@ model RefreshToken {
   @@index([userId])
 }
 
+model Workspace {
+  id           String   @id @default(cuid())
+  universityId String
+  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  color        String   @default("#334155")
+  icon         String?
+  isArchived   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  spaces      Space[]
+  memberships WorkspaceMembership[]
+
+  @@index([universityId])
+}
+
+model WorkspaceMembership {
+  id          String        @id @default(cuid())
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        WorkspaceRole @default(MEMBER)
+  joinedAt    DateTime      @default(now())
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
 model Space {
   id           String     @id @default(cuid())
   universityId String
   university   University  @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  workspaceId  String
+  workspace    Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   name         String
   description  String?
   color        String     @default("#0F766E")
@@ -173,6 +213,7 @@ model Space {
   memberships SpaceMembership[]
 
   @@index([universityId])
+  @@index([workspaceId])
 }
 
 model SpaceMembership {
@@ -247,6 +288,10 @@ model Task {
   dueDate       DateTime?
   estimatedMins Int?
   isArchived    Boolean      @default(false)
+  // When the task most recently entered COMPLETED status. Drives the auto-archive
+  // sweep (completed tasks move to Archive 15 days after this). Cleared if the
+  // task is reopened, so re-completing it restarts the countdown.
+  completedAt   DateTime?
 
   // Recurrence (iCal-like RRULE string, evaluated app-side)
   recurrenceRule String?
@@ -532,8 +577,10 @@ model ActivityLog {
   id        String   @id @default(cuid())
   taskId    String
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  actorId   String
-  actor     User     @relation(fields: [actorId], references: [id])
+  // Null for system-initiated entries (e.g. the auto-archive sweep) that have no
+  // human actor — mirrors AuditLog.actorId.
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id])
   action    String   // e.g. "STATUS_CHANGED", "ASSIGNEE_ADDED"
   meta      Json?
   createdAt DateTime @default(now())

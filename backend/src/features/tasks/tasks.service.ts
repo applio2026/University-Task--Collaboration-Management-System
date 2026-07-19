@@ -78,7 +78,7 @@ export async function listTasks(
 }
 
 /** Grouped view for the Overview page: for the given user, every accessible
- *  cluster with its tasks, grouped under its space. */
+ *  cluster with its tasks, grouped under its space (and that space's workspace). */
 export async function overviewForUser(userId: string, systemRole: string) {
   const clusterWhere: Prisma.ClusterWhereInput =
     systemRole === 'SUPER_ADMIN'
@@ -88,13 +88,17 @@ export async function overviewForUser(userId: string, systemRole: string) {
           OR: [
             { memberships: { some: { userId } } },
             { space: { memberships: { some: { userId, role: 'SPACE_ADMIN' } } } },
+            // A Workspace Admin acts as Space Admin everywhere in their workspace.
+            { space: { workspace: { memberships: { some: { userId, role: 'WORKSPACE_ADMIN' } } } } },
           ],
         };
 
   const clusters = await prisma.cluster.findMany({
     where: clusterWhere,
     include: {
-      space: { select: { id: true, name: true, color: true } },
+      space: {
+        select: { id: true, name: true, color: true, workspace: { select: { id: true, name: true, color: true } } },
+      },
       tasks: {
         where: { isArchived: false },
         include: taskInclude,
@@ -106,7 +110,8 @@ export async function overviewForUser(userId: string, systemRole: string) {
 
   return clusters.map((c) => ({
     cluster: { id: c.id, name: c.name, color: c.color, kind: c.kind },
-    space: c.space,
+    space: { id: c.space.id, name: c.space.name, color: c.space.color },
+    workspace: c.space.workspace,
     tasks: c.tasks,
   }));
 }
@@ -219,6 +224,12 @@ export async function updateTask(
   const patch: Prisma.TaskUpdateInput = { ...data } as Prisma.TaskUpdateInput;
   if (data.startDate !== undefined) patch.startDate = data.startDate ? new Date(data.startDate) : null;
   if (data.dueDate !== undefined) patch.dueDate = data.dueDate ? new Date(data.dueDate) : null;
+
+  // Track when the task became COMPLETED — drives the 15-day auto-archive sweep.
+  // Reopening it clears the timestamp so re-completing it restarts the countdown.
+  if (data.status && data.status !== existing.status) {
+    patch.completedAt = data.status === TaskStatus.COMPLETED ? new Date() : null;
+  }
 
   // Build a from→to change list for the task history.
   const changes: { field: string; from: string | null; to: string | null }[] = [];
@@ -492,4 +503,35 @@ export async function bulkUpdateTasks(ids: string[], data: Prisma.TaskUpdateMany
   if (ids.length === 0) return 0;
   const result = await prisma.task.updateMany({ where: { id: { in: ids } }, data });
   return result.count;
+}
+
+// ── Auto-archive ────────────────────────────────────────────
+export const COMPLETED_AUTO_ARCHIVE_DAYS = 15;
+
+/**
+ * Archives every task that has sat COMPLETED for COMPLETED_AUTO_ARCHIVE_DAYS
+ * days or more. Intended to run periodically (see src/jobs/autoArchive.ts).
+ * Returns the number of tasks archived, and logs an activity entry per task
+ * (actor is the task itself — this is a system action, not a user's) so the
+ * task history reflects why it disappeared from the active board.
+ */
+export async function archiveStaleCompletedTasks(): Promise<number> {
+  const cutoff = new Date(Date.now() - COMPLETED_AUTO_ARCHIVE_DAYS * 24 * 60 * 60 * 1000);
+  const stale = await prisma.task.findMany({
+    where: { status: TaskStatus.COMPLETED, isArchived: false, completedAt: { lte: cutoff } },
+    select: { id: true },
+  });
+  if (stale.length === 0) return 0;
+
+  const ids = stale.map((t) => t.id);
+  await prisma.task.updateMany({ where: { id: { in: ids } }, data: { isArchived: true } });
+  await prisma.activityLog.createMany({
+    data: ids.map((taskId) => ({
+      taskId,
+      actorId: null,
+      action: 'TASK_AUTO_ARCHIVED',
+      meta: { reason: `Completed for ${COMPLETED_AUTO_ARCHIVE_DAYS}+ days` },
+    })),
+  });
+  return ids.length;
 }

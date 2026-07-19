@@ -6,9 +6,9 @@ const prisma = new PrismaClient();
 const PASSWORD = 'Password123!';
 
 /**
- * Minimal seed: only the organization and the Super Admin are auto-generated.
- * Everything else — users, spaces, clusters, tasks — is created by the Super
- * Admin from within the app.
+ * Minimal seed: only the organization, the Super Admin, and one default
+ * "General" workspace are auto-generated. Everything else — users, spaces,
+ * clusters, tasks — is created by the Super Admin from within the app.
  */
 async function main() {
   console.log('🌱 Seeding (Super Admin only)…');
@@ -31,6 +31,8 @@ async function main() {
     prisma.cluster.deleteMany(),
     prisma.spaceMembership.deleteMany(),
     prisma.space.deleteMany(),
+    prisma.workspaceMembership.deleteMany(),
+    prisma.workspace.deleteMany(),
     prisma.notification.deleteMany(),
     prisma.auditLog.deleteMany(),
     prisma.taskTemplate.deleteMany(),
@@ -53,6 +55,16 @@ async function main() {
       fullName: 'Super Admin',
       systemRole: 'SUPER_ADMIN',
       avatarColor: '#DC2626',
+    },
+  });
+
+  // A workspace is required before any Space can be created — bootstrap one so
+  // the Super Admin has somewhere to start from immediately after seeding.
+  await prisma.workspace.create({
+    data: {
+      universityId: university.id,
+      name: 'General',
+      description: 'Default workspace — create Spaces here, or add new workspaces for isolated teams.',
     },
   });
 

@@ -134,7 +134,7 @@ router.post(
  * /submissions/{submissionId}/grade:
  *   post:
  *     tags: [Submissions]
- *     summary: Grade a submission (TA or Faculty)
+ *     summary: Grade a submission (Manager or Faculty)
  *     security: [{ bearerAuth: [] }]
  */
 router.post(

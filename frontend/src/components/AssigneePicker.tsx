@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { MiniUser } from '../types';
-import { Avatar } from './ui';
+import { Avatar, clusterRoleLabel } from './ui';
 
 export interface PickerMember {
   role: string; // STUDENT | TEACHING_ASSISTANT | CLUSTER_ADMIN
@@ -8,8 +8,8 @@ export interface PickerMember {
 }
 
 const ROLE_FILTERS: { key: string; label: string }[] = [
-  { key: 'STUDENT', label: 'Students' },
-  { key: 'TEACHING_ASSISTANT', label: 'Teaching Assistants' },
+  { key: 'STUDENT', label: 'Users' },
+  { key: 'TEACHING_ASSISTANT', label: 'Managers' },
   { key: 'CLUSTER_ADMIN', label: 'Faculty' },
 ];
 
@@ -78,7 +78,7 @@ export function AssigneePicker({
             <input type="checkbox" checked={selectedSet.has(m.user.id)} onChange={() => toggleUser(m.user.id)} />
             <Avatar user={m.user} size={22} />
             <span style={{ flex: 1 }}>{m.user.fullName}</span>
-            <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>{m.role.replace('_', ' ').toLowerCase()}</span>
+            <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>{clusterRoleLabel(m.role)}</span>
           </label>
         ))}
         {visible.length === 0 && (

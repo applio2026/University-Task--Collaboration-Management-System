@@ -48,7 +48,7 @@ export function DependenciesPanel({ taskId, clusterId }: { taskId: string; clust
     },
     onError: (err) => {
       if (axios.isAxiosError(err) && err.response?.status === 403) {
-        setError('Only Teaching Assistants or Faculty can set dependencies.');
+        setError('Only Managers or Faculty can set dependencies.');
       } else if (axios.isAxiosError(err) && err.response?.status === 400) {
         setError(err.response.data?.error?.message ?? 'Invalid dependency.');
       } else {

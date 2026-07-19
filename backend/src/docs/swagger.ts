@@ -12,8 +12,9 @@ export const openApiDocument = {
     title: 'University Task & Collaboration Management System API',
     version: '0.1.0',
     description:
-      'REST API for the University TCMS. Hierarchy: University → Space → Cluster → Task. ' +
-      'JWT auth with role-based access control (Super Admin, Space Admin, Cluster Admin/Faculty, TA, Student).',
+      'REST API for the University TCMS. Hierarchy: University → Workspace → Space → Cluster → Task. ' +
+      'JWT auth with role-based access control (Super Admin, Workspace Admin, Space Admin, Cluster Admin/Faculty, Manager, User). ' +
+      'A workspace and everything inside it is invisible to users without access to that workspace.',
   },
   servers: [{ url: '/api' }],
   components: {
@@ -24,6 +25,7 @@ export const openApiDocument = {
   tags: [
     { name: 'Auth' },
     { name: 'Users' },
+    { name: 'Workspaces' },
     { name: 'Spaces' },
     { name: 'Clusters' },
     { name: 'Tasks' },
@@ -34,9 +36,20 @@ export const openApiDocument = {
     '/auth/register': { post: { tags: ['Auth'], summary: 'Register' } },
     '/auth/refresh': { post: { tags: ['Auth'], summary: 'Rotate refresh token' } },
     '/auth/me': { get: { tags: ['Auth'], summary: 'Current user', security: [{ bearerAuth: [] }] } },
+    '/workspaces': {
+      get: {
+        tags: ['Workspaces'],
+        summary: 'List accessible workspaces (others are invisible)',
+        security: [{ bearerAuth: [] }],
+      },
+      post: { tags: ['Workspaces'], summary: 'Create workspace (super admin)', security: [{ bearerAuth: [] }] },
+    },
+    '/workspaces/{workspaceId}/spaces': {
+      get: { tags: ['Workspaces'], summary: 'List spaces in a workspace', security: [{ bearerAuth: [] }] },
+      post: { tags: ['Workspaces'], summary: 'Create space in a workspace (workspace admin)', security: [{ bearerAuth: [] }] },
+    },
     '/spaces': {
-      get: { tags: ['Spaces'], summary: 'List accessible spaces', security: [{ bearerAuth: [] }] },
-      post: { tags: ['Spaces'], summary: 'Create space (super admin)', security: [{ bearerAuth: [] }] },
+      get: { tags: ['Spaces'], summary: 'List accessible spaces (flat, across workspaces)', security: [{ bearerAuth: [] }] },
     },
     '/spaces/{spaceId}/clusters': {
       get: { tags: ['Clusters'], summary: 'List clusters', security: [{ bearerAuth: [] }] },
