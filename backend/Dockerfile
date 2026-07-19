@@ -36,6 +36,7 @@ COPY package*.json ./
 RUN npm install
 
 COPY prisma ./prisma
+COPY scripts ./scripts
 
 RUN npx prisma generate
 

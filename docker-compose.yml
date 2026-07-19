@@ -60,11 +60,16 @@ services:
     volumes:
       - ./backend/uploads:/app/uploads
 
+    # safe-migrate handles adding Space.workspaceId to a database that already
+    # has Space rows (a plain `prisma db push` fails on that with a foreign-key
+    # violation — see backend/scripts/safe-migrate.ts). seed-if-empty only runs
+    # the destructive seed script on a genuinely empty database, so container
+    # restarts never wipe real data again.
     command: >
       sh -c "
       npx prisma generate &&
-      npx prisma db push --skip-generate --accept-data-loss &&
-      npm run seed &&
+      npx tsx scripts/safe-migrate.ts &&
+      npx tsx scripts/seed-if-empty.ts &&
       npm start
       "
 
