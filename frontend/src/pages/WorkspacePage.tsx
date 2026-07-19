@@ -1,20 +1,24 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuth } from '../store/auth';
+import { useActiveWorkspace } from '../store/workspace';
 import type { Space, Workspace } from '../types';
 import { initials } from '../components/ui';
 import { CreateSpaceModal } from '../components/CreateSpaceModal';
 import { RenameModal } from '../components/RenameModal';
+import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
 
 export function WorkspacePage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const me = useAuth((s) => s.user);
+  const { activeWorkspaceId, setActiveWorkspace } = useActiveWorkspace();
   const [creating, setCreating] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const { data: workspace } = useQuery({
     queryKey: ['workspace', workspaceId],
@@ -29,6 +33,15 @@ export function WorkspacePage() {
   });
 
   const canManage = me?.systemRole === 'SUPER_ADMIN';
+
+  const deleteWorkspace = useMutation({
+    mutationFn: async () => api.delete(`/workspaces/${workspaceId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['workspaces'] });
+      if (activeWorkspaceId === workspaceId) setActiveWorkspace(null);
+      navigate('/');
+    },
+  });
 
   return (
     <div>
@@ -45,6 +58,16 @@ export function WorkspacePage() {
             onClick={() => setRenaming(true)}
           >
             ✎ Rename
+          </button>
+        )}
+        {canManage && workspace && (
+          <button
+            className="btn btn-ghost"
+            title="Delete workspace"
+            style={{ padding: '2px 8px', color: 'var(--p-urgent)' }}
+            onClick={() => setDeleting(true)}
+          >
+            🗑 Delete
           </button>
         )}
         {canManage && (
@@ -107,6 +130,17 @@ export function WorkspacePage() {
             qc.invalidateQueries({ queryKey: ['workspaces'] });
           }}
           onClose={() => setRenaming(false)}
+        />
+      )}
+
+      {deleting && workspace && (
+        <ConfirmDeleteModal
+          title="Delete workspace"
+          entityLabel="workspace"
+          entityName={workspace.name}
+          warning="This archives the workspace and every Space, Cluster and Task inside it. A Super Admin can restore each of them later from the Archive page, but restoring the workspace itself won't automatically bring its contents back."
+          onConfirm={() => deleteWorkspace.mutateAsync().then(() => undefined)}
+          onClose={() => setDeleting(false)}
         />
       )}
     </div>

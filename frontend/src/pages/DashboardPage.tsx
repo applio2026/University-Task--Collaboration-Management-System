@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuth } from '../store/auth';
+import { useActiveWorkspace } from '../store/workspace';
 import type { OverviewGroup, Task, TaskPriority, TaskStatus } from '../types';
 import { TaskTable } from '../components/TaskTable';
 import { TaskDrawer } from '../components/TaskDrawer';
@@ -13,7 +14,6 @@ const PRIORITIES: TaskPriority[] = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
 type Row = {
   task: Task;
   workspaceId: string;
-  workspaceName: string;
   spaceId: string;
   spaceName: string;
   clusterId: string;
@@ -22,10 +22,10 @@ type Row = {
 
 export function DashboardPage() {
   const me = useAuth((s) => s.user);
+  const { activeWorkspaceId } = useActiveWorkspace();
   const isSuper = me?.systemRole === 'SUPER_ADMIN';
   // Super Admin has no personal assignments → always the general view.
   const [scope, setScope] = useState<'mine' | 'all'>(isSuper ? 'all' : 'mine');
-  const [workspaceId, setWorkspaceId] = useState('');
   const [spaceId, setSpaceId] = useState('');
   const [clusterId, setClusterId] = useState('');
   const [status, setStatus] = useState('');
@@ -37,44 +37,37 @@ export function DashboardPage() {
     queryFn: async () => (await api.get('/tasks/overview')).data.groups as OverviewGroup[],
   });
 
-  // Flatten groups into task rows tagged with their workspace + space + cluster.
+  // Flatten groups into task rows tagged with their workspace + space + cluster,
+  // scoped up front to the active workspace (picked once via the sidebar
+  // switcher) — no separate "Workspace" filter needed here.
   const rows = useMemo<Row[]>(
     () =>
-      (groups ?? []).flatMap((g) =>
-        g.tasks.map((task) => ({
-          task,
-          workspaceId: g.workspace.id,
-          workspaceName: g.workspace.name,
-          spaceId: g.space.id,
-          spaceName: g.space.name,
-          clusterId: g.cluster.id,
-          clusterName: g.cluster.name,
-        })),
-      ),
-    [groups],
+      (groups ?? [])
+        .filter((g) => !activeWorkspaceId || g.workspace.id === activeWorkspaceId)
+        .flatMap((g) =>
+          g.tasks.map((task) => ({
+            task,
+            workspaceId: g.workspace.id,
+            spaceId: g.space.id,
+            spaceName: g.space.name,
+            clusterId: g.cluster.id,
+            clusterName: g.cluster.name,
+          })),
+        ),
+    [groups, activeWorkspaceId],
   );
-
-  const workspaceOptions = useMemo(() => {
-    const map = new Map<string, string>();
-    rows.forEach((r) => map.set(r.workspaceId, r.workspaceName));
-    return [...map.entries()];
-  }, [rows]);
 
   const spaceOptions = useMemo(() => {
     const map = new Map<string, string>();
-    rows
-      .filter((r) => !workspaceId || r.workspaceId === workspaceId)
-      .forEach((r) => map.set(r.spaceId, r.spaceName));
+    rows.forEach((r) => map.set(r.spaceId, r.spaceName));
     return [...map.entries()];
-  }, [rows, workspaceId]);
+  }, [rows]);
 
   const clusterOptions = useMemo(() => {
     const map = new Map<string, string>();
-    rows
-      .filter((r) => (!workspaceId || r.workspaceId === workspaceId) && (!spaceId || r.spaceId === spaceId))
-      .forEach((r) => map.set(r.clusterId, r.clusterName));
+    rows.filter((r) => !spaceId || r.spaceId === spaceId).forEach((r) => map.set(r.clusterId, r.clusterName));
     return [...map.entries()];
-  }, [rows, workspaceId, spaceId]);
+  }, [rows, spaceId]);
 
   const mineActive = !isSuper && scope === 'mine';
 
@@ -85,12 +78,11 @@ export function DashboardPage() {
       rows.filter(
         (r) =>
           (!mineActive || r.task.assignees.some((a) => a.user.id === me?.id)) &&
-          (!workspaceId || r.workspaceId === workspaceId) &&
           (!spaceId || r.spaceId === spaceId) &&
           (!clusterId || r.clusterId === clusterId) &&
           (!priority || r.task.priority === priority),
       ),
-    [rows, mineActive, me?.id, workspaceId, spaceId, clusterId, priority],
+    [rows, mineActive, me?.id, spaceId, clusterId, priority],
   );
 
   // The task table additionally honors the selected status.
@@ -119,25 +111,6 @@ export function DashboardPage() {
       </div>
 
       <div className="filter-bar">
-        <div className="field">
-          <label>Workspace</label>
-          <select
-            className="select"
-            value={workspaceId}
-            onChange={(e) => {
-              setWorkspaceId(e.target.value);
-              setSpaceId(''); // reset space + cluster when workspace changes
-              setClusterId('');
-            }}
-          >
-            <option value="">All workspaces</option>
-            {workspaceOptions.map(([id, name]) => (
-              <option key={id} value={id}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </div>
         <div className="field">
           <label>Space</label>
           <select
@@ -189,11 +162,10 @@ export function DashboardPage() {
             ))}
           </select>
         </div>
-        {(workspaceId || spaceId || clusterId || status || priority) && (
+        {(spaceId || clusterId || status || priority) && (
           <button
             className="btn btn-ghost"
             onClick={() => {
-              setWorkspaceId('');
               setSpaceId('');
               setClusterId('');
               setStatus('');

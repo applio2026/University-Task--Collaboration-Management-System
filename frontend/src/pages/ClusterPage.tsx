@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { getSocket } from '../lib/socket';
 import { useAuth } from '../store/auth';
@@ -13,10 +13,11 @@ import { ChatPanel } from '../components/ChatPanel';
 import { ClusterFiles } from '../components/ClusterFiles';
 import { ClusterMembers } from '../components/ClusterMembers';
 import { RenameModal } from '../components/RenameModal';
+import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
 import { initials } from '../components/ui';
 
 type ClusterDetail = Cluster & {
-  space: { name: string; color: string };
+  space: { id: string; name: string; color: string };
   memberships?: { role: string; user: { id: string } }[];
 };
 
@@ -31,11 +32,13 @@ const TABS: { key: Tab; label: string }[] = [
 
 export function ClusterPage() {
   const { clusterId } = useParams<{ clusterId: string }>();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const me = useAuth((s) => s.user);
   const [openTask, setOpenTask] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [tab, setTab] = useState<Tab>('tasks');
 
   const { data: cluster } = useQuery({
@@ -56,6 +59,14 @@ export function ClusterPage() {
   const canPost = isSuper || myRole === 'CLUSTER_ADMIN' || myRole === 'TEACHING_ASSISTANT';
   // Removing members / renaming the cluster stays with Faculty and admins.
   const canManageRoles = isSuper || myRole === 'CLUSTER_ADMIN';
+
+  const deleteCluster = useMutation({
+    mutationFn: async () => api.delete(`/clusters/${clusterId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['clusters'] });
+      navigate(cluster?.space ? `/spaces/${cluster.space.id}` : '/');
+    },
+  });
 
   // Join the cluster's realtime room for live task/comment/chat/announcement updates.
   useEffect(() => {
@@ -88,6 +99,16 @@ export function ClusterPage() {
             onClick={() => setRenaming(true)}
           >
             ✎ Rename
+          </button>
+        )}
+        {isSuper && cluster && (
+          <button
+            className="btn btn-ghost"
+            title="Delete cluster"
+            style={{ padding: '2px 8px', color: 'var(--p-urgent)' }}
+            onClick={() => setDeleting(true)}
+          >
+            🗑 Delete
           </button>
         )}
         {tab === 'tasks' && (
@@ -149,6 +170,17 @@ export function ClusterPage() {
             qc.invalidateQueries({ queryKey: ['clusters'] });
           }}
           onClose={() => setRenaming(false)}
+        />
+      )}
+
+      {deleting && cluster && (
+        <ConfirmDeleteModal
+          title="Delete cluster"
+          entityLabel="cluster"
+          entityName={cluster.name}
+          warning="This archives the cluster, any nested sub-clusters, and every Task inside them. Restoring it later from the Archive page brings back only this cluster itself."
+          onConfirm={() => deleteCluster.mutateAsync().then(() => undefined)}
+          onClose={() => setDeleting(false)}
         />
       )}
     </div>

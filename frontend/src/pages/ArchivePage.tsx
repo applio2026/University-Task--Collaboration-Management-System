@@ -1,10 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 
+interface ArchivedWorkspace { id: string; name: string; color: string }
 interface ArchivedSpace { id: string; name: string; color: string }
 interface ArchivedCluster { id: string; name: string; color: string; kind: string; space: { name: string } }
 interface ArchivedTask { id: string; title: string; cluster: { name: string } }
 interface ArchiveData {
+  workspaces: ArchivedWorkspace[];
   spaces: ArchivedSpace[];
   clusters: ArchivedCluster[];
   tasks: ArchivedTask[];
@@ -19,16 +21,23 @@ export function ArchivePage() {
   });
 
   const restore = useMutation({
-    mutationFn: async ({ kind, id }: { kind: 'spaces' | 'clusters' | 'tasks'; id: string }) =>
+    mutationFn: async ({ kind, id }: { kind: 'workspaces' | 'spaces' | 'clusters' | 'tasks'; id: string }) =>
       api.post(`/archive/${kind}/${id}/restore`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['archive'] });
+      qc.invalidateQueries({ queryKey: ['workspaces'] });
+      qc.invalidateQueries({ queryKey: ['workspace-spaces'] });
       qc.invalidateQueries({ queryKey: ['spaces'] });
       qc.invalidateQueries({ queryKey: ['overview'] });
     },
   });
 
-  const empty = data && data.spaces.length === 0 && data.clusters.length === 0 && data.tasks.length === 0;
+  const empty =
+    data &&
+    data.workspaces.length === 0 &&
+    data.spaces.length === 0 &&
+    data.clusters.length === 0 &&
+    data.tasks.length === 0;
 
   return (
     <div>
@@ -36,7 +45,8 @@ export function ArchivePage() {
         <h2 style={{ margin: 0 }}>Archive</h2>
       </div>
       <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>
-        Archived spaces, clusters (e.g. past semesters) and tasks. Restore brings them back into active use.
+        Archived workspaces, spaces, clusters (e.g. past semesters) and tasks. Restoring a workspace or space only
+        restores that item itself — restore its contents separately if you also need those back.
       </p>
 
       {isLoading ? (
@@ -47,6 +57,12 @@ export function ArchivePage() {
         <div style={{ color: 'var(--text-faint)', fontSize: 13 }}>Nothing is archived.</div>
       ) : (
         <>
+          <ArchiveSection title="Workspaces" count={data!.workspaces.length}>
+            {data!.workspaces.map((w) => (
+              <ArchiveRow key={w.id} label={w.name} onRestore={() => restore.mutate({ kind: 'workspaces', id: w.id })} pending={restore.isPending} />
+            ))}
+          </ArchiveSection>
+
           <ArchiveSection title="Spaces" count={data!.spaces.length}>
             {data!.spaces.map((s) => (
               <ArchiveRow key={s.id} label={s.name} onRestore={() => restore.mutate({ kind: 'spaces', id: s.id })} pending={restore.isPending} />

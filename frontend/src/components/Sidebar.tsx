@@ -3,19 +3,14 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuth } from '../store/auth';
-import type { Cluster, Space, Workspace } from '../types';
+import { useActiveWorkspace } from '../store/workspace';
+import type { Cluster, Space } from '../types';
 import { initials } from './ui';
 import { useOrgName } from '../lib/useOrgName';
+import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import { CreateWorkspaceModal } from './CreateWorkspaceModal';
 import { CreateSpaceModal } from './CreateSpaceModal';
 import { CreateClusterModal } from './CreateClusterModal';
-
-function useWorkspaces() {
-  return useQuery({
-    queryKey: ['workspaces'],
-    queryFn: async () => (await api.get('/workspaces')).data.workspaces as Workspace[],
-  });
-}
 
 function ClusterList({ spaceId }: { spaceId: string }) {
   const { data, isLoading } = useQuery({
@@ -122,74 +117,23 @@ function SpaceList({
   );
 }
 
-function WorkspaceRow({
-  workspace,
-  canAddSpace,
-  canAddCluster,
-  onAddSpace,
-  onAddCluster,
-}: {
-  workspace: Workspace;
-  canAddSpace: boolean;
-  canAddCluster: boolean;
-  onAddSpace: () => void;
-  onAddCluster: (space: Space) => void;
-}) {
-  const [open, setOpen] = useState(true);
-  const navigate = useNavigate();
-  return (
-    <div>
-      <div className="side-item" style={{ padding: '4px 6px', gap: 4 }}>
-        <button
-          title={open ? 'Collapse' : 'Expand'}
-          onClick={() => setOpen((o) => !o)}
-          style={{ width: 14, border: 'none', background: 'none', color: 'var(--text-faint)', cursor: 'pointer', padding: 0 }}
-        >
-          {open ? '▾' : '▸'}
-        </button>
-        <button
-          onClick={() => navigate(`/workspaces/${workspace.id}`)}
-          style={{ display: 'flex', alignItems: 'center', gap: 9, flex: 1, minWidth: 0, border: 'none', background: 'none', color: 'inherit', cursor: 'pointer', padding: 0 }}
-        >
-          <span className="badge-square" style={{ background: workspace.color }}>
-            {initials(workspace.name)}
-          </span>
-          <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
-            {workspace.name}
-          </span>
-          <span style={{ color: 'var(--text-faint)', fontSize: 11 }}>{workspace._count?.spaces ?? 0}</span>
-        </button>
-        {canAddSpace && (
-          <button
-            title="New space"
-            onClick={onAddSpace}
-            style={{ border: 'none', background: 'none', color: 'var(--text-faint)', cursor: 'pointer', fontSize: 15, padding: '0 2px' }}
-          >
-            ＋
-          </button>
-        )}
-      </div>
-      {open && (
-        <SpaceList
-          workspaceId={workspace.id}
-          canAddSpace={canAddSpace}
-          canAddCluster={canAddCluster}
-          onAddCluster={onAddCluster}
-        />
-      )}
-    </div>
-  );
-}
-
 export function Sidebar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const { data: workspaces } = useWorkspaces();
+  const { activeWorkspaceId } = useActiveWorkspace();
   const isSuper = user?.systemRole === 'SUPER_ADMIN';
   const orgName = useOrgName();
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
-  const [spaceWorkspace, setSpaceWorkspace] = useState<Workspace | null>(null);
+  const [creatingSpace, setCreatingSpace] = useState(false);
   const [clusterSpace, setClusterSpace] = useState<Space | null>(null);
+
+  // Only needed to label the "New Space in {name}" modal — shares the
+  // WorkspaceSwitcher's query cache, so this doesn't add a network request.
+  const activeWorkspaceName =
+    useQuery({
+      queryKey: ['workspaces'],
+      queryFn: async () => (await api.get('/workspaces')).data.workspaces as { id: string; name: string }[],
+    }).data?.find((w) => w.id === activeWorkspaceId)?.name ?? '';
 
   return (
     <aside className="sidebar scroll-y">
@@ -199,6 +143,22 @@ export function Sidebar() {
         </span>
         <strong>{orgName}</strong>
       </div>
+
+      {/* Pick the workspace right up front — everything below (spaces,
+          Dashboard, Reports) scopes to this choice, so there's no need to
+          re-select a workspace filter on every page. */}
+      <WorkspaceSwitcher />
+      {isSuper && (
+        <div style={{ padding: '0 10px 8px' }}>
+          <button
+            className="btn btn-ghost"
+            style={{ width: '100%', fontSize: 12, padding: '5px 8px' }}
+            onClick={() => setCreatingWorkspace(true)}
+          >
+            ＋ New workspace
+          </button>
+        </div>
+      )}
 
       <nav style={{ padding: '4px 8px' }}>
         <NavLink to="/" end className="side-item" style={({ isActive }) => (isActive ? { background: 'var(--surface-2)', color: 'var(--text)' } : {})}>
@@ -232,42 +192,37 @@ export function Sidebar() {
         </NavLink>
       </nav>
 
-      <div className="side-section-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span>Workspaces</span>
-        {isSuper && (
-          <button
-            title="New workspace"
-            onClick={() => setCreatingWorkspace(true)}
-            style={{ border: 'none', background: 'none', color: 'var(--text-faint)', cursor: 'pointer', fontSize: 15, padding: 0 }}
-          >
-            ＋
-          </button>
-        )}
-      </div>
-      <div style={{ padding: '0 8px' }}>
-        {workspaces?.map((w) => (
-          <WorkspaceRow
-            key={w.id}
-            workspace={w}
-            canAddSpace={isSuper}
-            canAddCluster={isSuper}
-            onAddSpace={() => setSpaceWorkspace(w)}
-            onAddCluster={setClusterSpace}
-          />
-        ))}
-        {!workspaces?.length && (
-          <div style={{ color: 'var(--text-faint)', fontSize: 12, padding: 8 }}>
-            No workspaces yet{isSuper ? ' — create one to get started.' : ' you have access to.'}
+      {activeWorkspaceId && (
+        <>
+          <div className="side-section-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>Spaces</span>
+            {isSuper && (
+              <button
+                title="New space"
+                onClick={() => setCreatingSpace(true)}
+                style={{ border: 'none', background: 'none', color: 'var(--text-faint)', cursor: 'pointer', fontSize: 15, padding: 0 }}
+              >
+                ＋
+              </button>
+            )}
           </div>
-        )}
-      </div>
+          <div style={{ padding: '0 8px' }}>
+            <SpaceList
+              workspaceId={activeWorkspaceId}
+              canAddSpace={isSuper}
+              canAddCluster={isSuper}
+              onAddCluster={setClusterSpace}
+            />
+          </div>
+        </>
+      )}
 
       {creatingWorkspace && <CreateWorkspaceModal onClose={() => setCreatingWorkspace(false)} />}
-      {spaceWorkspace && (
+      {creatingSpace && activeWorkspaceId && (
         <CreateSpaceModal
-          workspaceId={spaceWorkspace.id}
-          workspaceName={spaceWorkspace.name}
-          onClose={() => setSpaceWorkspace(null)}
+          workspaceId={activeWorkspaceId}
+          workspaceName={activeWorkspaceName}
+          onClose={() => setCreatingSpace(false)}
         />
       )}
       {clusterSpace && (

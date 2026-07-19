@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuth } from '../store/auth';
 import type { Cluster, OverviewGroup, Space, TaskStatus } from '../types';
 import { initials, statusLabel } from '../components/ui';
 import { CreateClusterModal } from '../components/CreateClusterModal';
 import { RenameModal } from '../components/RenameModal';
+import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
 import { TaskTable } from '../components/TaskTable';
 import { TaskDrawer } from '../components/TaskDrawer';
 
@@ -19,6 +20,7 @@ export function SpacePage() {
   const me = useAuth((s) => s.user);
   const [creating, setCreating] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [taskStatus, setTaskStatus] = useState('');
   const [openTask, setOpenTask] = useState<string | null>(null);
 
@@ -53,6 +55,19 @@ export function SpacePage() {
 
   const canManage = me?.systemRole === 'SUPER_ADMIN';
 
+  const deleteSpace = useMutation({
+    mutationFn: async () => api.delete(`/spaces/${spaceId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['spaces'] });
+      if (space?.workspace) {
+        qc.invalidateQueries({ queryKey: ['workspace-spaces', space.workspace.id] });
+        navigate(`/workspaces/${space.workspace.id}`);
+      } else {
+        navigate('/');
+      }
+    },
+  });
+
   return (
     <div>
       {space?.workspace && (
@@ -76,6 +91,16 @@ export function SpacePage() {
             onClick={() => setRenaming(true)}
           >
             ✎ Rename
+          </button>
+        )}
+        {canManage && space && (
+          <button
+            className="btn btn-ghost"
+            title="Delete space"
+            style={{ padding: '2px 8px', color: 'var(--p-urgent)' }}
+            onClick={() => setDeleting(true)}
+          >
+            🗑 Delete
           </button>
         )}
         {canManage && (
@@ -153,6 +178,17 @@ export function SpacePage() {
             if (space.workspace) qc.invalidateQueries({ queryKey: ['workspace-spaces', space.workspace.id] });
           }}
           onClose={() => setRenaming(false)}
+        />
+      )}
+
+      {deleting && space && (
+        <ConfirmDeleteModal
+          title="Delete space"
+          entityLabel="space"
+          entityName={space.name}
+          warning="This archives the space and every Cluster and Task inside it. A Super Admin can restore each of them later from the Archive page, but restoring the space itself won't automatically bring its contents back."
+          onConfirm={() => deleteSpace.mutateAsync().then(() => undefined)}
+          onClose={() => setDeleting(false)}
         />
       )}
     </div>

@@ -68,8 +68,28 @@ export async function updateCluster(clusterId: string, data: Prisma.ClusterUpdat
   return prisma.cluster.update({ where: { id: clusterId }, data });
 }
 
+/** Cluster ids for `clusterId` and every descendant (clusters self-nest via parentClusterId). */
+async function collectClusterAndDescendants(clusterId: string): Promise<string[]> {
+  const ids = [clusterId];
+  const children = await prisma.cluster.findMany({ where: { parentClusterId: clusterId }, select: { id: true } });
+  for (const c of children) {
+    ids.push(...(await collectClusterAndDescendants(c.id)));
+  }
+  return ids;
+}
+
+/** Archives a cluster, every nested child cluster, and every task in all of them.
+ *  Exported separately from archiveCluster so Space/Workspace archiving can
+ *  reuse it without double-fetching the top cluster row. */
+export async function archiveClusterTree(clusterId: string): Promise<void> {
+  const ids = await collectClusterAndDescendants(clusterId);
+  await prisma.task.updateMany({ where: { clusterId: { in: ids } }, data: { isArchived: true } });
+  await prisma.cluster.updateMany({ where: { id: { in: ids } }, data: { isArchived: true } });
+}
+
 export async function archiveCluster(clusterId: string) {
-  return prisma.cluster.update({ where: { id: clusterId }, data: { isArchived: true } });
+  await archiveClusterTree(clusterId);
+  return prisma.cluster.findUnique({ where: { id: clusterId } });
 }
 
 export async function restoreCluster(clusterId: string) {

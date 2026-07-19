@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { api, setAccessToken, refreshSession } from '../lib/api';
 import { connectSocket, disconnectSocket } from '../lib/socket';
+import { useActiveWorkspace } from './workspace';
 import type { User } from '../types';
 
 // ── Idle-session policy ───────────────────────────────────
@@ -67,6 +68,8 @@ export const useAuth = create<AuthState>((set) => ({
     setAccessToken(null);
     disconnectSocket();
     clearActivity();
+    // Don't leak a workspace selection into the next login on a shared device.
+    useActiveWorkspace.getState().setActiveWorkspace(null);
     set({ user: null, status: 'unauthenticated' });
   },
 

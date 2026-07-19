@@ -1,6 +1,7 @@
 import { Prisma, SpaceRole, WorkspaceRole } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { notFound } from '../../lib/errors';
+import { archiveClusterTree } from '../clusters/clusters.service';
 
 const workspaceContext = { select: { id: true, name: true, color: true } } as const;
 
@@ -112,7 +113,15 @@ export async function updateSpace(spaceId: string, data: Prisma.SpaceUpdateInput
   return prisma.space.update({ where: { id: spaceId }, data });
 }
 
+/** Archives a space along with every cluster (and their tasks) inside it. */
 export async function archiveSpace(spaceId: string) {
+  const topClusters = await prisma.cluster.findMany({
+    where: { spaceId, parentClusterId: null },
+    select: { id: true },
+  });
+  for (const c of topClusters) {
+    await archiveClusterTree(c.id);
+  }
   return prisma.space.update({ where: { id: spaceId }, data: { isArchived: true } });
 }
 

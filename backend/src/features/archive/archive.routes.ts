@@ -4,6 +4,7 @@ import { asyncHandler } from '../../lib/asyncHandler';
 import { authenticate } from '../../middleware/auth';
 import { requireSuperAdmin } from '../../middleware/rbac';
 import { writeAudit } from '../../lib/audit';
+import * as workspaces from '../workspaces/workspaces.service';
 import * as spaces from '../spaces/spaces.service';
 import * as clusters from '../clusters/clusters.service';
 
@@ -21,7 +22,8 @@ router.use(authenticate, requireSuperAdmin);
 router.get(
   '/',
   asyncHandler(async (_req, res) => {
-    const [archivedSpaces, archivedClusters, archivedTasks] = await Promise.all([
+    const [archivedWorkspaces, archivedSpaces, archivedClusters, archivedTasks] = await Promise.all([
+      prisma.workspace.findMany({ where: { isArchived: true }, orderBy: { name: 'asc' } }),
       prisma.space.findMany({ where: { isArchived: true }, orderBy: { name: 'asc' } }),
       prisma.cluster.findMany({
         where: { isArchived: true },
@@ -35,7 +37,16 @@ router.get(
         include: { cluster: { select: { name: true } } },
       }),
     ]);
-    res.json({ spaces: archivedSpaces, clusters: archivedClusters, tasks: archivedTasks });
+    res.json({ workspaces: archivedWorkspaces, spaces: archivedSpaces, clusters: archivedClusters, tasks: archivedTasks });
+  }),
+);
+
+router.post(
+  '/workspaces/:workspaceId/restore',
+  asyncHandler(async (req, res) => {
+    const workspace = await workspaces.restoreWorkspace(req.params.workspaceId);
+    writeAudit(req, 'WORKSPACE_RESTORED', 'Workspace', workspace.id);
+    res.json({ workspace });
   }),
 );
 

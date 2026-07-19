@@ -1,6 +1,7 @@
 import { Prisma, WorkspaceRole } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { notFound } from '../../lib/errors';
+import { archiveSpace } from '../spaces/spaces.service';
 
 /** Workspaces the user can see: super admin => all; else workspaces where they
  *  have an explicit WorkspaceMembership, or a membership somewhere in a Space
@@ -74,7 +75,12 @@ export async function updateWorkspace(workspaceId: string, data: Prisma.Workspac
   return prisma.workspace.update({ where: { id: workspaceId }, data });
 }
 
+/** Archives a workspace along with every space (and their clusters/tasks) inside it. */
 export async function archiveWorkspace(workspaceId: string) {
+  const spaceRows = await prisma.space.findMany({ where: { workspaceId }, select: { id: true } });
+  for (const s of spaceRows) {
+    await archiveSpace(s.id);
+  }
   return prisma.workspace.update({ where: { id: workspaceId }, data: { isArchived: true } });
 }
 
