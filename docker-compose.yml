@@ -52,6 +52,12 @@ services:
 
       CORS_ORIGIN: http://103.189.89.128:8093
 
+      # This deployment is served over plain HTTP (no TLS), so the refresh
+      # cookie must NOT be flagged Secure — browsers drop Secure cookies over
+      # HTTP, which logs users out on every page refresh. Set this to true once
+      # the site is behind HTTPS.
+      COOKIE_SECURE: "false"
+
       PORT: 4000
 
     ports:

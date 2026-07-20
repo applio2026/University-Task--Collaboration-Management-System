@@ -26,7 +26,10 @@ const REFRESH_COOKIE = 'refreshToken';
 const cookieOpts = {
   httpOnly: true,
   sameSite: 'lax' as const,
-  secure: process.env.NODE_ENV === 'production',
+  // Must be false when the app is served over plain HTTP — a Secure cookie is
+  // never stored by the browser over HTTP, which breaks silent refresh (logout
+  // on every page reload). Controlled by COOKIE_SECURE; see config/env.ts.
+  secure: env.cookieSecure,
   path: '/api/auth',
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };

@@ -34,6 +34,15 @@ export const env = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   isProd: process.env.NODE_ENV === 'production',
   port: Number(process.env.PORT ?? 4000),
+  // Whether the auth refresh cookie is flagged `Secure`. Browsers DROP Secure
+  // cookies received over plain HTTP, so a production deployment served over
+  // HTTP (no TLS) must set COOKIE_SECURE=false or users get logged out on every
+  // refresh (the refresh cookie never persists). Defaults to on in production;
+  // set to `true` explicitly once the site is behind HTTPS.
+  cookieSecure:
+    process.env.COOKIE_SECURE !== undefined
+      ? process.env.COOKIE_SECURE === 'true'
+      : process.env.NODE_ENV === 'production',
   // Self-service signup is off by default: the Super Admin creates accounts.
   allowPublicRegistration: process.env.ALLOW_PUBLIC_REGISTRATION === 'true',
   databaseUrl: required('DATABASE_URL', 'postgresql://uni:uni_secret@localhost:5432/uni_tcms?schema=public'),
