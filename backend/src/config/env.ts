@@ -46,4 +46,30 @@ export const env = {
     refreshTtl: process.env.JWT_REFRESH_TTL ?? '7d',
   },
   uploadsDir: process.env.UPLOADS_DIR ?? 'uploads',
+  cookie: cookieSettings(),
 };
+
+/**
+ * Refresh-cookie flags.
+ *
+ * `Secure` must reflect whether the app is actually served over HTTPS, not
+ * whether NODE_ENV is "production": a Secure cookie set over a plain-http origin
+ * is silently discarded by the browser, so login appears to work (the access
+ * token lives in memory) and the session dies on the first page refresh, when
+ * /auth/refresh is called with no cookie.
+ *
+ * Set COOKIE_SECURE=true only when the site is served over https. SameSite=None
+ * requires Secure, so it is downgraded to Lax if Secure is off.
+ */
+function cookieSettings() {
+  const secure = process.env.COOKIE_SECURE === 'true';
+  const requested = (process.env.COOKIE_SAMESITE ?? 'lax').toLowerCase();
+  const sameSite = (['lax', 'strict', 'none'].includes(requested) ? requested : 'lax') as
+    | 'lax'
+    | 'strict'
+    | 'none';
+  return {
+    secure,
+    sameSite: sameSite === 'none' && !secure ? ('lax' as const) : sameSite,
+  };
+}
