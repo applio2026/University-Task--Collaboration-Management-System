@@ -23,16 +23,16 @@ const loginLimiter = rateLimit({
 });
 
 const REFRESH_COOKIE = 'refreshToken';
-const cookieOpts = {
+// `secure`/`sameSite` come from config so an http-only deployment still gets the
+// refresh cookie stored — a Secure cookie on a plain-http origin is dropped by
+// the browser, which logs the user out on every page refresh.
+const cookieBase = {
   httpOnly: true,
-  sameSite: 'lax' as const,
-  // Must be false when the app is served over plain HTTP — a Secure cookie is
-  // never stored by the browser over HTTP, which breaks silent refresh (logout
-  // on every page reload). Controlled by COOKIE_SECURE; see config/env.ts.
-  secure: env.cookieSecure,
+  sameSite: env.cookie.sameSite,
+  secure: env.cookie.secure,
   path: '/api/auth',
-  maxAge: 7 * 24 * 60 * 60 * 1000,
 };
+const cookieOpts = { ...cookieBase, maxAge: 7 * 24 * 60 * 60 * 1000 };
 
 /**
  * @openapi
@@ -136,7 +136,7 @@ router.post(
   '/logout',
   asyncHandler(async (req, res) => {
     await service.logout(req.cookies?.[REFRESH_COOKIE]);
-    res.clearCookie(REFRESH_COOKIE, { path: '/api/auth' });
+    res.clearCookie(REFRESH_COOKIE, cookieBase);
     res.status(204).end();
   }),
 );
@@ -158,7 +158,7 @@ router.post(
   asyncHandler(async (req, res) => {
     await service.changePassword(req.user!.id, req.body.currentPassword, req.body.newPassword);
     // The refresh cookie is now revoked server-side; clear it client-side too.
-    res.clearCookie(REFRESH_COOKIE, { path: '/api/auth' });
+    res.clearCookie(REFRESH_COOKIE, cookieBase);
     res.status(204).end();
   }),
 );

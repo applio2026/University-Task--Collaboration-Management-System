@@ -52,11 +52,11 @@ services:
 
       CORS_ORIGIN: http://103.189.89.128:8093
 
-      # This deployment is served over plain HTTP (no TLS), so the refresh
-      # cookie must NOT be flagged Secure — browsers drop Secure cookies over
-      # HTTP, which logs users out on every page refresh. Set this to true once
-      # the site is behind HTTPS.
+      # The app is served over plain http, so the refresh cookie must NOT be
+      # marked Secure — browsers drop Secure cookies on http origins, which ends
+      # the session on every page refresh. Set to "true" once behind https.
       COOKIE_SECURE: "false"
+      COOKIE_SAMESITE: lax
 
       PORT: 4000
 
