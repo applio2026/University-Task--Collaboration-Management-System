@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
-import { SystemRole } from '@prisma/client';
+import { Prisma, SystemRole } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { asyncHandler } from '../../lib/asyncHandler';
 import { authenticate } from '../../middleware/auth';
@@ -175,6 +175,75 @@ router.post(
       prisma.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } }),
     ]);
     writeAudit(req, 'USER_PASSWORD_RESET', 'User', userId, { email: target.email });
+    res.status(204).end();
+  }),
+);
+
+/**
+ * @openapi
+ * /users/{userId}/active:
+ *   patch:
+ *     tags: [Users]
+ *     summary: Activate or deactivate a user (super admin only)
+ *     security: [{ bearerAuth: [] }]
+ */
+router.patch(
+  '/:userId/active',
+  requireSuperAdmin,
+  validate({ body: z.object({ isActive: z.boolean() }) }),
+  asyncHandler(async (req, res) => {
+    const { userId } = req.params;
+    // Guard against locking yourself out.
+    if (userId === req.user!.id) throw badRequest('You cannot change your own active status.');
+    const target = await prisma.user.findUnique({ where: { id: userId } });
+    if (!target) throw badRequest('User not found');
+
+    const { isActive } = req.body as { isActive: boolean };
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: userId }, data: { isActive } }),
+      // Deactivating: revoke sessions so they're signed out immediately (login
+      // already rejects inactive accounts, but this kills existing tokens too).
+      ...(isActive
+        ? []
+        : [prisma.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } })]),
+    ]);
+    writeAudit(req, isActive ? 'USER_ACTIVATED' : 'USER_DEACTIVATED', 'User', userId, { email: target.email });
+    res.json({ user: { id: target.id, isActive } });
+  }),
+);
+
+/**
+ * @openapi
+ * /users/{userId}:
+ *   delete:
+ *     tags: [Users]
+ *     summary: Permanently delete a user (super admin only)
+ *     security: [{ bearerAuth: [] }]
+ */
+router.delete(
+  '/:userId',
+  requireSuperAdmin,
+  asyncHandler(async (req, res) => {
+    const { userId } = req.params;
+    if (userId === req.user!.id) throw badRequest('You cannot delete your own account.');
+    const target = await prisma.user.findUnique({ where: { id: userId } });
+    if (!target) throw badRequest('User not found');
+
+    try {
+      // Cascade relations (memberships, assignments, watchers, comments, chat,
+      // notifications, tokens) delete with the user. Content they authored
+      // (created tasks, announcements, uploaded files, grades) is FK-restricted,
+      // so this throws P2003 rather than orphaning records.
+      await prisma.user.delete({ where: { id: userId } });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') {
+        throw conflict(
+          'This user has created content (tasks, announcements, files, or grades) and cannot be deleted. Deactivate them instead.',
+        );
+      }
+      throw e;
+    }
+    writeAudit(req, 'USER_DELETED', 'User', userId, { email: target.email });
     res.status(204).end();
   }),
 );
