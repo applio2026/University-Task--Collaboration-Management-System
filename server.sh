@@ -88,33 +88,42 @@ nginx_running()   { curl -s -o /dev/null --max-time 3 http://localhost:80/ >/dev
 # Silicon `sudo brew services` fails to bootstrap the LaunchDaemon (launchctl
 # error 5). Boot persistence is handled by a separate LaunchDaemon (see
 # deploy/com.uni-tcms.nginx.plist and README in the script header).
+# Bring nginx to the desired running state. Prefer a graceful config reload, but
+# `nginx -s reload/stop` needs a valid pid file — and ours sometimes ends up
+# empty ("invalid PID number"). When signaling isn't possible, fall back to a
+# hard restart (kill by name + fresh start) so it never gets stuck.
+nginx_apply() {
+  if nginx_running && sudo nginx -s reload 2>/dev/null; then
+    ok "nginx reloaded"
+  else
+    warn "graceful reload not possible (stale/empty pid) — hard restarting nginx"
+    sudo pkill nginx 2>/dev/null; sleep 1
+    sudo nginx && ok "nginx (re)started" || err "nginx failed to start"
+  fi
+}
+
 nginx_start() {
   nginx_installed || { warn "nginx not installed — skipping"; return 0; }
   if ! sudo nginx -t >/dev/null 2>&1; then err "nginx config test FAILED (run: sudo nginx -t) — not starting"; return 1; fi
-  if nginx_running; then
-    sudo nginx -s reload && ok "nginx reloaded"
-  else
-    warn "starting nginx (sudo — enter your password)"
-    sudo nginx && ok "nginx started" || err "nginx failed to start"
-  fi
+  warn "applying nginx (sudo — enter your password)"
+  nginx_apply
 }
 
 nginx_stop() {
   nginx_installed || return 0
   nginx_running || { ok "nginx already stopped"; return 0; }
   warn "stopping nginx (sudo — enter your password)"
-  sudo nginx -s stop && ok "nginx stopped" || err "nginx failed to stop"
+  # -s stop needs a valid pid file; if that's broken, kill by name instead.
+  sudo nginx -s stop 2>/dev/null || sudo pkill nginx 2>/dev/null
+  sleep 1
+  nginx_running && err "nginx still up" || ok "nginx stopped"
 }
 
 nginx_restart() {
   nginx_installed || { warn "nginx not installed — skipping"; return 0; }
   if ! sudo nginx -t >/dev/null 2>&1; then err "nginx config test FAILED (run: sudo nginx -t) — not restarting"; return 1; fi
   warn "restarting nginx (sudo — enter your password)"
-  if nginx_running; then
-    sudo nginx -s reload && ok "nginx reloaded" || err "nginx reload failed"
-  else
-    sudo nginx && ok "nginx started" || err "nginx failed to start"
-  fi
+  nginx_apply
 }
 
 http_ok() { [ "$(curl -s --max-time 5 -o /dev/null -w '%{http_code}' "$1" 2>/dev/null)" = "200" ]; }
