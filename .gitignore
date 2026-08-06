@@ -37,3 +37,6 @@ backend/uploads/*
 
 # Docker volumes
 postgres-data/
+
+# Preserved production hosting env (secrets)
+.env.hosting
