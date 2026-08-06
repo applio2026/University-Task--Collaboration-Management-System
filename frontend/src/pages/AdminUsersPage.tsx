@@ -5,6 +5,7 @@ import type { SystemRole } from '../types';
 import { Avatar } from '../components/ui';
 import { Modal } from '../components/Modal';
 import { CreateUserModal } from '../components/CreateUserModal';
+import { ResetPasswordModal } from '../components/ResetPasswordModal';
 import { MembershipAssigner } from '../components/MembershipAssigner';
 
 interface AdminUser {
@@ -20,6 +21,7 @@ interface AdminUser {
 export function AdminUsersPage() {
   const [creating, setCreating] = useState(false);
   const [assignUser, setAssignUser] = useState<AdminUser | null>(null);
+  const [resetUser, setResetUser] = useState<AdminUser | null>(null);
 
   const { data: users, isLoading } = useQuery({
     queryKey: ['users'],
@@ -49,7 +51,7 @@ export function AdminUsersPage() {
               <th style={{ width: 130 }}>System role</th>
               <th style={{ width: 90 }}>Spaces</th>
               <th style={{ width: 90 }}>Clusters</th>
-              <th style={{ width: 90 }}>Action</th>
+              <th style={{ width: 170 }}>Action</th>
             </tr>
           </thead>
           <tbody>
@@ -68,9 +70,14 @@ export function AdminUsersPage() {
                 <td>{u._count.spaceMemberships}</td>
                 <td>{u._count.clusterMemberships}</td>
                 <td>
-                  <button className="btn btn-ghost" onClick={() => setAssignUser(u)}>
-                    Assign
-                  </button>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button className="btn btn-ghost" onClick={() => setAssignUser(u)}>
+                      Assign
+                    </button>
+                    <button className="btn btn-ghost" onClick={() => setResetUser(u)}>
+                      Reset PW
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -86,6 +93,14 @@ export function AdminUsersPage() {
       )}
 
       {creating && <CreateUserModal onClose={() => setCreating(false)} />}
+      {resetUser && (
+        <ResetPasswordModal
+          userId={resetUser.id}
+          userName={resetUser.fullName}
+          email={resetUser.email}
+          onClose={() => setResetUser(null)}
+        />
+      )}
       {assignUser && (
         <Modal title={`Assign access — ${assignUser.fullName}`} onClose={() => setAssignUser(null)}>
           <MembershipAssigner userId={assignUser.id} userName={assignUser.fullName} />

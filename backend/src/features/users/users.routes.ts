@@ -148,6 +148,39 @@ router.post(
 
 /**
  * @openapi
+ * /users/{userId}/reset-password:
+ *   post:
+ *     tags: [Users]
+ *     summary: Reset any user's password (super admin only)
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post(
+  '/:userId/reset-password',
+  requireSuperAdmin,
+  validate({ body: z.object({ newPassword: strongPassword }) }),
+  asyncHandler(async (req, res) => {
+    const { userId } = req.params;
+    const target = await prisma.user.findUnique({ where: { id: userId } });
+    if (!target) throw badRequest('User not found');
+
+    const passwordHash = await bcrypt.hash(req.body.newPassword, 10);
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: userId },
+        // Admin-set password is temporary: force the user to rotate it on next
+        // login, and clear any lockout from failed attempts.
+        data: { passwordHash, mustChangePassword: true, failedLoginAttempts: 0, lockedUntil: null },
+      }),
+      // Revoke every active session so the old password's tokens stop working.
+      prisma.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } }),
+    ]);
+    writeAudit(req, 'USER_PASSWORD_RESET', 'User', userId, { email: target.email });
+    res.status(204).end();
+  }),
+);
+
+/**
+ * @openapi
  * /users/search:
  *   get:
  *     tags: [Users]
