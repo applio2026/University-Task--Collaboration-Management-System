@@ -1,118 +1,25 @@
-name: Deploy - University Task Collaboration Management System
+name: Deploy to production (self-hosted Mac)
 
+# Push to `production` → the self-hosted runner ON the Mac runs the deploy
+# script, which re-runs tests, snapshots the current release, builds, applies
+# the DB schema, restarts, health-checks, and auto-rolls-back on any failure.
+#
+# The runner polls GitHub over an outbound connection, so nothing new needs to
+# be exposed on the router/firewall. See DEPLOYMENT.md for one-time setup.
 on:
   push:
-    branches:
-      - production
+    branches: [production]
   workflow_dispatch:
 
 concurrency:
-  group: production-deployment
-  cancel-in-progress: true
+  group: production-deploy
+  cancel-in-progress: false # never interrupt an in-flight deploy
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
-
+    runs-on: [self-hosted, macOS]
     steps:
-      - name: Deploy to Production Server
-        uses: appleboy/ssh-action@v1.2.0
-
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_KEY }}
-          port: ${{ secrets.PORT }}
-          script_stop: true
-          timeout: 30m
-
-          script: |
-            set -e
-
-            PROJECT_DIR="/var/www/universityTaskManagement/University-Task--Collaboration-Management-System"
-
-            echo "======================================"
-            echo "University Task Deployment Started"
-            echo "======================================"
-
-            cd "$PROJECT_DIR"
-
-            echo "Fetching latest code..."
-            git fetch origin
-
-            echo "Resetting production branch..."
-            git reset --hard origin/production
-
-            echo "Cleaning repository..."
-            git clean -fd
-
-            echo "Stopping old containers..."
-            docker compose down || true
-
-            echo "Removing unused Docker images..."
-            docker image prune -af
-
-            echo "Building latest images..."
-            docker compose build --no-cache
-
-            echo "Starting containers..."
-            docker compose up -d
-
-            echo "Waiting for backend container..."
-            for i in $(seq 1 30); do
-              if docker compose ps backend | grep -q "Up"; then
-                echo "Backend container is running."
-                break
-              fi
-
-              echo "Waiting..."
-              sleep 2
-            done
-
-            if ! docker compose ps backend | grep -q "Up"; then
-              echo "Backend failed to start."
-
-              docker compose ps
-              docker compose logs backend
-
-              exit 1
-            fi
-
-            echo "Waiting for API..."
-
-            for i in $(seq 1 30); do
-              if curl -fs http://127.0.0.1:4001/api/health >/dev/null 2>&1; then
-                echo "API is ready."
-                break
-              fi
-
-              echo "API not ready..."
-              sleep 2
-            done
-
-            if ! curl -fs http://127.0.0.1:4001/api/health >/dev/null 2>&1; then
-              echo "Backend API failed."
-
-              docker compose ps
-
-              echo "========== Backend Logs =========="
-              docker compose logs backend
-
-              echo "========== Frontend Logs =========="
-              docker compose logs frontend
-
-              exit 1
-            fi
-
-            echo "========== Container Status =========="
-            docker compose ps
-
-            echo "========== Backend Logs =========="
-            docker compose logs --tail=50 backend
-
-            echo "========== Frontend Logs =========="
-            docker compose logs --tail=20 frontend
-
-            echo "======================================"
-            echo "Deployment Completed Successfully"
-            echo "======================================"
+      - name: Run deploy script on the Mac
+        # deploy.sh figures out its own APP_DIR and does git fetch/reset itself,
+        # so no actions/checkout is needed (and the live app dir stays canonical).
+        run: /Users/amritesh/Documents/GitHub/University-Task--Collaboration-Management-System/scripts/deploy.sh

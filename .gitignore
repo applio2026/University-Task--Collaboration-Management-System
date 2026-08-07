@@ -40,3 +40,6 @@ postgres-data/
 
 # Preserved production hosting env (secrets)
 .env.hosting
+
+# Deploy release snapshots (rollback images)
+.deploy/
