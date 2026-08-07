@@ -8,7 +8,6 @@ import { authenticate } from '../../middleware/auth';
 import { requireSuperAdmin } from '../../middleware/rbac';
 import { validate } from '../../middleware/validate';
 import { conflict, badRequest } from '../../lib/errors';
-import { strongPassword } from '../../lib/password';
 import { writeAudit } from '../../lib/audit';
 
 const router = Router();
@@ -109,7 +108,10 @@ router.post(
   validate({
     body: z.object({
       email: z.string().email(),
-      password: strongPassword,
+      // Admin-set initial password is temporary (mustChangePassword forces a
+      // rotation on first login), so a min-length temp password is enough — this
+      // allows defaulting it to the user's email.
+      password: z.string().min(6, 'Temporary password must be at least 6 characters'),
       fullName: z.string().min(2),
       systemRole: z.nativeEnum(SystemRole).default(SystemRole.USER),
       avatarColor: z.string().optional(),

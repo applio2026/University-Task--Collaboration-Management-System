@@ -108,10 +108,18 @@ describe('POST /users (create)', () => {
       .send({ email: 'dup@x.com', password: 'Abcdef12', fullName: 'Dup User' })
       .expect(409);
   });
-  it('400 on a weak password', async () => {
+  it('400 on a too-short password', async () => {
     await request(app).post('/api/users').set(...bearer(superToken))
       .send({ email: 'w@x.com', password: 'weak', fullName: 'Weak User' })
       .expect(400);
+  });
+  it('accepts the email as the temporary password (default)', async () => {
+    p.user.findUnique.mockResolvedValue(null);
+    p.university.findFirst.mockResolvedValue({ id: 'uni1' });
+    p.user.create.mockResolvedValue({ id: 'e1', email: 'person@x.com', fullName: 'Person', systemRole: 'USER', avatarColor: '#000', isActive: true });
+    await request(app).post('/api/users').set(...bearer(superToken))
+      .send({ email: 'person@x.com', password: 'person@x.com', fullName: 'Person Name' })
+      .expect(201);
   });
   it('400 when no university exists', async () => {
     p.user.findUnique.mockResolvedValue(null);
