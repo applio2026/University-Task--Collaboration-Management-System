@@ -95,8 +95,8 @@ git reset --hard "origin/$BRANCH" || { err "git reset failed"; exit 1; }
 ok "checked out ${NEW_SHA:0:8}"
 
 log "Installing dependencies"
-( cd backend && npm ci ) || { err "backend npm ci failed"; rollback; exit 1; }
-( cd frontend && npm ci ) || { err "frontend npm ci failed"; rollback; exit 1; }
+( cd backend && npm ci --include=dev ) || { err "backend npm ci failed"; rollback; exit 1; }
+( cd frontend && npm ci --include=dev ) || { err "frontend npm ci failed"; rollback; exit 1; }
 
 log "Running tests (deploy gate)"
 ( cd backend && npm test ) || { err "TESTS FAILED — aborting deploy"; rollback; exit 1; }
