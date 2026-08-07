@@ -79,6 +79,21 @@ Run it manually too: `./scripts/deploy.sh` (deploy) or
 > The runner makes only **outbound** connections to GitHub, so no router
 > port-forward or firewall change is required.
 
+## Branch protection (so tests actually gate merges)
+
+CI only *blocks* a bad merge if you require it. On GitHub:
+
+1. **Repo → Settings → Branches → Add branch ruleset** (or "Add rule") for
+   `production` (and `Test` if you want).
+2. Enable **Require a pull request before merging**.
+3. Enable **Require status checks to pass before merging**, and select the CI
+   checks: **`backend-tests`** and **`frontend-build`**.
+4. (Recommended) **Require branches to be up to date before merging**, and
+   **Do not allow bypassing the above settings**.
+
+Now nothing reaches `production` (and triggers a deploy) unless the tests pass.
+The deploy script *also* re-runs the tests on the server as a second gate.
+
 ## Secrets / env
 
 - `.env` files (`backend/.env`, `frontend/.env`) live **only on the Mac** and are

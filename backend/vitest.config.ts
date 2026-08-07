@@ -17,6 +17,7 @@ export default defineConfig({
         'src/lib/errors.ts',
         'src/middleware/auth.ts',
         'src/middleware/rbac.ts',
+        'src/features/users/users.routes.ts',
       ],
       thresholds: { statements: 95, branches: 90, functions: 95, lines: 95 },
     },
