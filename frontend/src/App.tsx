@@ -24,7 +24,7 @@ function FullScreenLoader() {
   );
 }
 
-// Auto-logout after 2 minutes of inactivity. User interaction resets the timer
+// Auto-logout after IDLE_LIMIT_MS of inactivity (8h). User interaction resets the timer
 // (throttled); a short poll checks whether the idle limit has been exceeded and,
 // if so, logs out and returns to the login screen.
 function useIdleLogout(active: boolean) {
