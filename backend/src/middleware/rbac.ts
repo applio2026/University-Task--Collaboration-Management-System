@@ -25,13 +25,30 @@ export function requireSuperAdmin(req: Request, _res: Response, next: NextFuncti
   next();
 }
 
+/**
+ * Full content access = SUPER_ADMIN or ADMIN. ADMIN manages ALL content
+ * (workspaces/spaces/clusters/tasks) exactly like a super admin, but NOT user
+ * management, config, audit or archive (those stay requireSuperAdmin).
+ */
+export function hasGlobalContentAccess(systemRole?: string): boolean {
+  return systemRole === 'SUPER_ADMIN' || systemRole === 'ADMIN';
+}
+
+/** Require SUPER_ADMIN or ADMIN — for content-management actions like creating
+ *  or archiving workspaces/spaces. */
+export function requireContentAdmin(req: Request, _res: Response, next: NextFunction): void {
+  if (!req.user) throw unauthorized();
+  if (!hasGlobalContentAccess(req.user.systemRole)) throw forbidden('Admin only');
+  next();
+}
+
 /** Returns the user's WorkspaceRole for a workspace, or null if none (super admin => WORKSPACE_ADMIN). */
 export async function getWorkspaceRole(
   userId: string,
   workspaceId: string,
   systemRole?: string,
 ): Promise<WorkspaceRole | null> {
-  if (systemRole === 'SUPER_ADMIN') return WorkspaceRole.WORKSPACE_ADMIN;
+  if (hasGlobalContentAccess(systemRole)) return WorkspaceRole.WORKSPACE_ADMIN;
   const m = await prisma.workspaceMembership.findUnique({
     where: { workspaceId_userId: { workspaceId, userId } },
   });
@@ -46,7 +63,7 @@ export async function getWorkspaceRole(
  * existence and contents are invisible to users without any access to it."
  */
 export async function canAccessWorkspace(userId: string, workspaceId: string, systemRole?: string): Promise<boolean> {
-  if (systemRole === 'SUPER_ADMIN') return true;
+  if (hasGlobalContentAccess(systemRole)) return true;
   const direct = await prisma.workspaceMembership.findUnique({
     where: { workspaceId_userId: { workspaceId, userId } },
   });
@@ -79,7 +96,7 @@ export function requireWorkspaceAccess() {
 /** Returns the user's SpaceRole for a space, or null if none. Cascades from an
  *  effective WORKSPACE_ADMIN of the parent workspace (super admin => SPACE_ADMIN). */
 export async function getSpaceRole(userId: string, spaceId: string, systemRole?: string): Promise<SpaceRole | null> {
-  if (systemRole === 'SUPER_ADMIN') return SpaceRole.SPACE_ADMIN;
+  if (hasGlobalContentAccess(systemRole)) return SpaceRole.SPACE_ADMIN;
 
   const space = await prisma.space.findUnique({ where: { id: spaceId }, select: { workspaceId: true } });
   if (!space) return null;
@@ -99,7 +116,7 @@ export async function getClusterRole(
   clusterId: string,
   systemRole?: string,
 ): Promise<ClusterRole | null> {
-  if (systemRole === 'SUPER_ADMIN') return ClusterRole.CLUSTER_ADMIN;
+  if (hasGlobalContentAccess(systemRole)) return ClusterRole.CLUSTER_ADMIN;
 
   const cluster = await prisma.cluster.findUnique({
     where: { id: clusterId },

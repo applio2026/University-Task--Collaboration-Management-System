@@ -116,7 +116,7 @@ export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () =>
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, margin: '8px 0 6px' }}>
             <h3 style={{ margin: 0, flex: 1 }}>{task?.title ?? '…'}</h3>
-            {task && me?.systemRole === 'SUPER_ADMIN' && (
+            {task && (me?.systemRole === 'SUPER_ADMIN' || me?.systemRole === 'ADMIN') && (
               <button
                 className="btn btn-ghost"
                 title="Rename task"
@@ -207,7 +207,7 @@ export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () =>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
                   {task.assignees.map((a) => {
                     const st = a.status ?? 'OPEN';
-                    const canEdit = a.user.id === me?.id || me?.systemRole === 'SUPER_ADMIN';
+                    const canEdit = a.user.id === me?.id || (me?.systemRole === 'SUPER_ADMIN' || me?.systemRole === 'ADMIN');
                     return (
                       <div
                         key={a.user.id}

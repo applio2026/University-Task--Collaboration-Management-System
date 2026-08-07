@@ -4,7 +4,7 @@ import { SpaceRole } from '@prisma/client';
 import { asyncHandler } from '../../lib/asyncHandler';
 import { authenticate } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
-import { requireSpaceRole, requireSuperAdmin, getSpaceRole } from '../../middleware/rbac';
+import { requireSpaceRole, requireContentAdmin, getSpaceRole } from '../../middleware/rbac';
 import { forbidden } from '../../lib/errors';
 import { writeAudit } from '../../lib/audit';
 import * as service from './spaces.service';
@@ -66,7 +66,7 @@ router.patch(
 
 router.delete(
   '/:spaceId',
-  requireSuperAdmin,
+  requireContentAdmin,
   asyncHandler(async (req, res) => {
     await service.archiveSpace(req.params.spaceId);
     writeAudit(req, 'SPACE_ARCHIVED', 'Space', req.params.spaceId);

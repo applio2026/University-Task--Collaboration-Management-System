@@ -17,6 +17,7 @@ datasource db {
 
 enum SystemRole {
   SUPER_ADMIN
+  ADMIN // full access to all content (workspaces/spaces/clusters/tasks), but NOT user management, config, audit or archive
   USER // ordinary user; effective privileges derive from memberships
 }
 

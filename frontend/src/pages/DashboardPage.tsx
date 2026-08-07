@@ -23,7 +23,7 @@ type Row = {
 export function DashboardPage() {
   const me = useAuth((s) => s.user);
   const { activeWorkspaceId } = useActiveWorkspace();
-  const isSuper = me?.systemRole === 'SUPER_ADMIN';
+  const isSuper = me?.systemRole === 'SUPER_ADMIN' || me?.systemRole === 'ADMIN';
   // Super Admin has no personal assignments → always the general view.
   const [scope, setScope] = useState<'mine' | 'all'>(isSuper ? 'all' : 'mine');
   const [spaceId, setSpaceId] = useState('');

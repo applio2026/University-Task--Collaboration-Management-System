@@ -55,7 +55,7 @@ export function ClusterPage() {
 
   // Can the current user post announcements / add members? (Faculty / TA / Super Admin.)
   const myRole = cluster?.memberships?.find((m) => m.user.id === me?.id)?.role;
-  const isSuper = me?.systemRole === 'SUPER_ADMIN';
+  const isSuper = me?.systemRole === 'SUPER_ADMIN' || me?.systemRole === 'ADMIN';
   const canPost = isSuper || myRole === 'CLUSTER_ADMIN' || myRole === 'TEACHING_ASSISTANT';
   // Removing members / renaming the cluster stays with Faculty and admins.
   const canManageRoles = isSuper || myRole === 'CLUSTER_ADMIN';

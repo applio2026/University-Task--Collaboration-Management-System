@@ -121,7 +121,7 @@ export function Sidebar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { activeWorkspaceId } = useActiveWorkspace();
-  const isSuper = user?.systemRole === 'SUPER_ADMIN';
+  const isSuper = user?.systemRole === 'SUPER_ADMIN' || user?.systemRole === 'ADMIN';
   const orgName = useOrgName();
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [creatingSpace, setCreatingSpace] = useState(false);

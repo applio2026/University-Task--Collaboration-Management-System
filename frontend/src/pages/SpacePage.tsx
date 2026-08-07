@@ -53,7 +53,7 @@ export function SpacePage() {
     [spaceTasks, taskStatus],
   );
 
-  const canManage = me?.systemRole === 'SUPER_ADMIN';
+  const canManage = me?.systemRole === 'SUPER_ADMIN' || me?.systemRole === 'ADMIN';
 
   const deleteSpace = useMutation({
     mutationFn: async () => api.delete(`/spaces/${spaceId}`),

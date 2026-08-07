@@ -76,7 +76,9 @@ export function AdminUsersPage() {
                 </td>
                 <td style={{ color: 'var(--text-muted)' }}>{u.email}</td>
                 <td>
-                  <span className="pill">{u.systemRole === 'SUPER_ADMIN' ? 'Super Admin' : 'User'}</span>
+                  <span className="pill">
+                    {u.systemRole === 'SUPER_ADMIN' ? 'Super Admin' : u.systemRole === 'ADMIN' ? 'Admin' : 'User'}
+                  </span>
                 </td>
                 <td>
                   <span

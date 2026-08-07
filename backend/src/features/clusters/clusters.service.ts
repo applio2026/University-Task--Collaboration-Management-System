@@ -4,7 +4,7 @@ import { notFound } from '../../lib/errors';
 
 export async function listClustersForSpace(spaceId: string, userId: string, systemRole: string) {
   const isPrivileged =
-    systemRole === 'SUPER_ADMIN' ||
+    (systemRole === 'SUPER_ADMIN' || systemRole === 'ADMIN') ||
     (await prisma.spaceMembership.findFirst({
       where: { spaceId, userId, role: 'SPACE_ADMIN' },
     })) != null;
