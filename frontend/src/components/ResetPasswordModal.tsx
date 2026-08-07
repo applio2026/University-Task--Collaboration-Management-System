@@ -28,7 +28,9 @@ export function ResetPasswordModal({
   email: string;
   onClose: () => void;
 }) {
-  const [password, setPassword] = useState('');
+  // Default the temporary password to the user's email — a simple, memorable
+  // reset the admin can share; the user is prompted to change it on next login.
+  const [password, setPassword] = useState(email);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
@@ -51,8 +53,8 @@ export function ResetPasswordModal({
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (password.length < 8) {
-      setError('Enter a password of 8+ characters.');
+    if (password.length < 6) {
+      setError('Enter a password of at least 6 characters.');
       return;
     }
     reset.mutate();
@@ -90,8 +92,8 @@ export function ResetPasswordModal({
     <Modal title={`Reset password — ${userName}`} onClose={onClose}>
       <form onSubmit={onSubmit}>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 0 }}>
-          Set a temporary password for <strong>{email}</strong>. They'll be prompted to change it on next
-          login, and all their current sessions will be signed out.
+          Temporary password for <strong>{email}</strong> — defaults to their email address. They'll be
+          prompted to change it on next login, and all their current sessions will be signed out.
         </p>
         <div className="field">
           <label>New password</label>
@@ -101,7 +103,7 @@ export function ResetPasswordModal({
             value={password}
             autoFocus
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="8+ chars, upper, lower, number"
+            placeholder="at least 6 characters"
           />
         </div>
         <button

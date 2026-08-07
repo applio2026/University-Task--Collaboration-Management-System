@@ -138,10 +138,18 @@ describe('POST /users/:id/reset-password', () => {
       .send({ newPassword: 'Abcdef12' })
       .expect(400);
   });
-  it('400 on a weak new password', async () => {
+  it('400 on a too-short new password', async () => {
     await request(app).post('/api/users/u1/reset-password').set(...bearer(superToken))
       .send({ newPassword: 'weak' })
       .expect(400);
+  });
+  it('accepts the user email as a temporary password (default)', async () => {
+    p.user.findUnique.mockResolvedValue({ id: 'u1', email: 'chinmoy@gmail.com' });
+    p.user.updateMany.mockResolvedValue({ count: 1 });
+    p.refreshToken.updateMany.mockResolvedValue({ count: 0 });
+    await request(app).post('/api/users/u1/reset-password').set(...bearer(superToken))
+      .send({ newPassword: 'chinmoy@gmail.com' })
+      .expect(204);
   });
 });
 

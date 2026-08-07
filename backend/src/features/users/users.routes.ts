@@ -157,7 +157,10 @@ router.post(
 router.post(
   '/:userId/reset-password',
   requireSuperAdmin,
-  validate({ body: z.object({ newPassword: strongPassword }) }),
+  // Admin-set reset passwords are temporary (mustChangePassword forces a rotation
+  // on next login), so the full strong-password policy isn't required here — this
+  // lets an admin reset to a simple default such as the user's email.
+  validate({ body: z.object({ newPassword: z.string().min(6, 'Temporary password must be at least 6 characters') }) }),
   asyncHandler(async (req, res) => {
     const { userId } = req.params;
     const target = await prisma.user.findUnique({ where: { id: userId } });
