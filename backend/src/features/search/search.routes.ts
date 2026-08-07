@@ -12,7 +12,7 @@ router.use(authenticate);
 /** Cluster access filter: super admins see all; others see clusters they belong
  *  to or are space-admin of. Mirrors the Overview access rules. */
 function accessibleClusterWhere(userId: string, systemRole: string): Prisma.ClusterWhereInput {
-  if (systemRole === 'SUPER_ADMIN') return { isArchived: false };
+  if ((systemRole === 'SUPER_ADMIN' || systemRole === 'ADMIN')) return { isArchived: false };
   return {
     isArchived: false,
     OR: [

@@ -32,7 +32,7 @@ export function WorkspacePage() {
     enabled: !!workspaceId,
   });
 
-  const canManage = me?.systemRole === 'SUPER_ADMIN';
+  const canManage = me?.systemRole === 'SUPER_ADMIN' || me?.systemRole === 'ADMIN';
 
   const deleteWorkspace = useMutation({
     mutationFn: async () => api.delete(`/workspaces/${workspaceId}`),

@@ -11,7 +11,7 @@ const workspaceContext = { select: { id: true, name: true, color: true } } as co
  *  access to (direct or cascaded) — so this can't leak a space from a
  *  workspace the user has no access to. */
 export async function listAccessibleSpaces(userId: string, systemRole: string) {
-  if (systemRole === 'SUPER_ADMIN') {
+  if ((systemRole === 'SUPER_ADMIN' || systemRole === 'ADMIN')) {
     return prisma.space.findMany({
       where: { isArchived: false },
       orderBy: { createdAt: 'asc' },
@@ -44,7 +44,7 @@ export async function listAccessibleSpaces(userId: string, systemRole: string) {
  *  listAccessibleSpaces, scoped to one workspace. */
 export async function listSpacesForWorkspace(workspaceId: string, userId: string, systemRole: string) {
   const isPrivileged =
-    systemRole === 'SUPER_ADMIN' ||
+    (systemRole === 'SUPER_ADMIN' || systemRole === 'ADMIN') ||
     (await prisma.workspaceMembership.findFirst({
       where: { workspaceId, userId, role: WorkspaceRole.WORKSPACE_ADMIN },
     })) != null;

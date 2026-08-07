@@ -4,7 +4,7 @@ import { WorkspaceRole } from '@prisma/client';
 import { asyncHandler } from '../../lib/asyncHandler';
 import { authenticate } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
-import { requireWorkspaceRole, requireWorkspaceAccess, requireSuperAdmin } from '../../middleware/rbac';
+import { requireWorkspaceRole, requireWorkspaceAccess, requireContentAdmin } from '../../middleware/rbac';
 import { writeAudit } from '../../lib/audit';
 import * as service from './workspaces.service';
 import * as spaceService from '../spaces/spaces.service';
@@ -37,7 +37,7 @@ router.get(
  */
 router.post(
   '/workspaces',
-  requireSuperAdmin,
+  requireContentAdmin,
   validate({
     body: z.object({
       name: z.string().min(2),
@@ -86,7 +86,7 @@ router.patch(
 
 router.delete(
   '/workspaces/:workspaceId',
-  requireSuperAdmin,
+  requireContentAdmin,
   asyncHandler(async (req, res) => {
     await service.archiveWorkspace(req.params.workspaceId);
     writeAudit(req, 'WORKSPACE_ARCHIVED', 'Workspace', req.params.workspaceId);

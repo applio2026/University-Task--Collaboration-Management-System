@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.uni-tcms.nginx</string>
+  <!-- Start nginx at boot as root (LaunchDaemons run as root → can bind port 80).
+       Plain `nginx` daemonizes itself; RunAtLoad starts it once at boot. No
+       KeepAlive, so `server.sh stop` / `sudo nginx -s stop` can stop it and it
+       stays stopped until you start it again or reboot. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/nginx</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/opt/homebrew/var/log/nginx-daemon.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/opt/homebrew/var/log/nginx-daemon.err.log</string>
+</dict>
+</plist>

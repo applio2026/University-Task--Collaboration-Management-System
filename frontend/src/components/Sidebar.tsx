@@ -121,11 +121,31 @@ export function Sidebar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { activeWorkspaceId } = useActiveWorkspace();
-  const isSuper = user?.systemRole === 'SUPER_ADMIN';
+  const isSuper = user?.systemRole === 'SUPER_ADMIN' || user?.systemRole === 'ADMIN';
   const orgName = useOrgName();
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [creatingSpace, setCreatingSpace] = useState(false);
   const [clusterSpace, setClusterSpace] = useState<Space | null>(null);
+
+  // Collapsible main-menu panel. Persist the open/closed choice so a minimized
+  // menu stays minimized across reloads.
+  const [menuOpen, setMenuOpen] = useState(() => {
+    try {
+      return localStorage.getItem('uni_menu_open') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  const toggleMenu = () =>
+    setMenuOpen((o) => {
+      const next = !o;
+      try {
+        localStorage.setItem('uni_menu_open', String(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
 
   // Only needed to label the "New Space in {name}" modal — shares the
   // WorkspaceSwitcher's query cache, so this doesn't add a network request.
@@ -160,37 +180,48 @@ export function Sidebar() {
         </div>
       )}
 
-      <nav style={{ padding: '4px 8px' }}>
-        <NavLink to="/" end className="side-item" style={({ isActive }) => (isActive ? { background: 'var(--surface-2)', color: 'var(--text)' } : {})}>
-          <span>▦</span> Dashboard
-        </NavLink>
-        <NavLink to="/reports" className="side-item" style={({ isActive }) => (isActive ? { background: 'var(--surface-2)', color: 'var(--text)' } : {})}>
-          <span>📊</span> Reports
-        </NavLink>
-        {user?.systemRole === 'SUPER_ADMIN' && (
-          <NavLink to="/admin/users" className="side-item" style={({ isActive }) => (isActive ? { background: 'var(--surface-2)', color: 'var(--text)' } : {})}>
-            <span>👥</span> Users
+      <div
+        className="side-section-label"
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+        onClick={toggleMenu}
+        title={menuOpen ? 'Minimize menu' : 'Maximize menu'}
+      >
+        <span>Menu</span>
+        <span style={{ color: 'var(--text-faint)', fontSize: 12 }}>{menuOpen ? '▾' : '▸'}</span>
+      </div>
+      {menuOpen && (
+        <nav style={{ padding: '4px 8px' }}>
+          <NavLink to="/" end className="side-item" style={({ isActive }) => (isActive ? { background: 'var(--surface-2)', color: 'var(--text)' } : {})}>
+            <span>▦</span> Dashboard
           </NavLink>
-        )}
-        {user?.systemRole === 'SUPER_ADMIN' && (
-          <NavLink to="/admin/audit" className="side-item" style={({ isActive }) => (isActive ? { background: 'var(--surface-2)', color: 'var(--text)' } : {})}>
-            <span>🕓</span> Audit Log
+          <NavLink to="/reports" className="side-item" style={({ isActive }) => (isActive ? { background: 'var(--surface-2)', color: 'var(--text)' } : {})}>
+            <span>📊</span> Reports
           </NavLink>
-        )}
-        {user?.systemRole === 'SUPER_ADMIN' && (
-          <NavLink to="/admin/templates" className="side-item" style={({ isActive }) => (isActive ? { background: 'var(--surface-2)', color: 'var(--text)' } : {})}>
-            <span>🧩</span> Templates
+          {user?.systemRole === 'SUPER_ADMIN' && (
+            <NavLink to="/admin/users" className="side-item" style={({ isActive }) => (isActive ? { background: 'var(--surface-2)', color: 'var(--text)' } : {})}>
+              <span>👥</span> Users
+            </NavLink>
+          )}
+          {user?.systemRole === 'SUPER_ADMIN' && (
+            <NavLink to="/admin/audit" className="side-item" style={({ isActive }) => (isActive ? { background: 'var(--surface-2)', color: 'var(--text)' } : {})}>
+              <span>🕓</span> Audit Log
+            </NavLink>
+          )}
+          {user?.systemRole === 'SUPER_ADMIN' && (
+            <NavLink to="/admin/templates" className="side-item" style={({ isActive }) => (isActive ? { background: 'var(--surface-2)', color: 'var(--text)' } : {})}>
+              <span>🧩</span> Templates
+            </NavLink>
+          )}
+          {user?.systemRole === 'SUPER_ADMIN' && (
+            <NavLink to="/admin/archive" className="side-item" style={({ isActive }) => (isActive ? { background: 'var(--surface-2)', color: 'var(--text)' } : {})}>
+              <span>🗄️</span> Archive
+            </NavLink>
+          )}
+          <NavLink to="/calendar" className="side-item" style={({ isActive }) => (isActive ? { background: 'var(--surface-2)', color: 'var(--text)' } : {})}>
+            <span>▤</span> Calendar
           </NavLink>
-        )}
-        {user?.systemRole === 'SUPER_ADMIN' && (
-          <NavLink to="/admin/archive" className="side-item" style={({ isActive }) => (isActive ? { background: 'var(--surface-2)', color: 'var(--text)' } : {})}>
-            <span>🗄️</span> Archive
-          </NavLink>
-        )}
-        <NavLink to="/calendar" className="side-item" style={({ isActive }) => (isActive ? { background: 'var(--surface-2)', color: 'var(--text)' } : {})}>
-          <span>▤</span> Calendar
-        </NavLink>
-      </nav>
+        </nav>
+      )}
 
       {activeWorkspaceId && (
         <>

@@ -9,7 +9,7 @@ import type { User } from '../types';
 // the app is open (see App.tsx's useIdleLogout) — refreshing the page is
 // itself a user action and always restores the session via the refresh
 // cookie, regardless of how long it's been since the last mouse/key event.
-export const IDLE_LIMIT_MS = 2 * 60 * 1000; // 2 minutes
+export const IDLE_LIMIT_MS = 8 * 60 * 60 * 1000; // 8 hours (a work session)
 const IDLE_KEY = 'uni_last_activity';
 
 export function touchActivity(): void {
@@ -78,14 +78,14 @@ export const useAuth = create<AuthState>((set) => ({
   // any concurrent 401 retry) results in exactly one /auth/refresh call — a
   // second call would race the token rotation and log the user straight back out.
   //
-  // Deliberately does NOT gate this on isIdleExpired(): the 2-minute idle
-  // policy is enforced by the live timer in App.tsx's useIdleLogout while the
-  // app is open, which is the only place that can distinguish "genuinely idle"
-  // from "just reading the page for a bit." Checking the stale pre-refresh
-  // activity timestamp here caused a real bug — any refresh after ~2 minutes
-  // of not touching the mouse (completely normal while reading) looked
-  // indistinguishable from "was idle," logging the user out on the very
-  // refresh that proves they're still there.
+  // Deliberately does NOT gate this on isIdleExpired(): the idle policy
+  // (IDLE_LIMIT_MS, 8h) is enforced by the live timer in App.tsx's
+  // useIdleLogout while the app is open, which is the only place that can
+  // distinguish "genuinely idle" from "just reading the page for a bit."
+  // Checking the stale pre-refresh activity timestamp here caused a real bug —
+  // any refresh after the limit of not touching the mouse (completely normal
+  // while reading) looked indistinguishable from "was idle," logging the user
+  // out on the very refresh that proves they're still there.
   bootstrap: async () => {
     set({ status: 'loading' });
     const result = await refreshSession();

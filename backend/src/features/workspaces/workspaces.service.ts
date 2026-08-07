@@ -8,7 +8,7 @@ import { archiveSpace } from '../spaces/spaces.service';
  *  or Cluster that lives inside it (cascade-up, mirroring how Space visibility
  *  already cascades from Cluster membership). Anything else stays invisible. */
 export async function listAccessibleWorkspaces(userId: string, systemRole: string) {
-  if (systemRole === 'SUPER_ADMIN') {
+  if ((systemRole === 'SUPER_ADMIN' || systemRole === 'ADMIN')) {
     return prisma.workspace.findMany({
       where: { isArchived: false },
       orderBy: { createdAt: 'asc' },

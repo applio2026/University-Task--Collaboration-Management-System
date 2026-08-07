@@ -1,4 +1,4 @@
-export type SystemRole = 'SUPER_ADMIN' | 'USER';
+export type SystemRole = 'SUPER_ADMIN' | 'ADMIN' | 'USER';
 export type WorkspaceRole = 'WORKSPACE_ADMIN' | 'MEMBER';
 export type ClusterRole = 'CLUSTER_ADMIN' | 'TEACHING_ASSISTANT' | 'STUDENT';
 export type TaskStatus = 'OPEN' | 'IN_PROGRESS' | 'REVIEW' | 'COMPLETED' | 'REJECTED' | 'LATE';

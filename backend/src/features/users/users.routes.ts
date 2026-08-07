@@ -1,14 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
-import { SystemRole } from '@prisma/client';
+import { Prisma, SystemRole } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { asyncHandler } from '../../lib/asyncHandler';
 import { authenticate } from '../../middleware/auth';
 import { requireSuperAdmin } from '../../middleware/rbac';
 import { validate } from '../../middleware/validate';
 import { conflict, badRequest } from '../../lib/errors';
-import { strongPassword } from '../../lib/password';
 import { writeAudit } from '../../lib/audit';
 
 const router = Router();
@@ -109,7 +108,10 @@ router.post(
   validate({
     body: z.object({
       email: z.string().email(),
-      password: strongPassword,
+      // Admin-set initial password is temporary (mustChangePassword forces a
+      // rotation on first login), so a min-length temp password is enough — this
+      // allows defaulting it to the user's email.
+      password: z.string().min(6, 'Temporary password must be at least 6 characters'),
       fullName: z.string().min(2),
       systemRole: z.nativeEnum(SystemRole).default(SystemRole.USER),
       avatarColor: z.string().optional(),
@@ -143,6 +145,111 @@ router.post(
     });
     writeAudit(req, 'USER_CREATED', 'User', user.id, { email: user.email, systemRole });
     res.status(201).json({ user });
+  }),
+);
+
+/**
+ * @openapi
+ * /users/{userId}/reset-password:
+ *   post:
+ *     tags: [Users]
+ *     summary: Reset any user's password (super admin only)
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post(
+  '/:userId/reset-password',
+  requireSuperAdmin,
+  // Admin-set reset passwords are temporary (mustChangePassword forces a rotation
+  // on next login), so the full strong-password policy isn't required here — this
+  // lets an admin reset to a simple default such as the user's email.
+  validate({ body: z.object({ newPassword: z.string().min(6, 'Temporary password must be at least 6 characters') }) }),
+  asyncHandler(async (req, res) => {
+    const { userId } = req.params;
+    const target = await prisma.user.findUnique({ where: { id: userId } });
+    if (!target) throw badRequest('User not found');
+
+    const passwordHash = await bcrypt.hash(req.body.newPassword, 10);
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: userId },
+        // Admin-set password is temporary: force the user to rotate it on next
+        // login, and clear any lockout from failed attempts.
+        data: { passwordHash, mustChangePassword: true, failedLoginAttempts: 0, lockedUntil: null },
+      }),
+      // Revoke every active session so the old password's tokens stop working.
+      prisma.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } }),
+    ]);
+    writeAudit(req, 'USER_PASSWORD_RESET', 'User', userId, { email: target.email });
+    res.status(204).end();
+  }),
+);
+
+/**
+ * @openapi
+ * /users/{userId}/active:
+ *   patch:
+ *     tags: [Users]
+ *     summary: Activate or deactivate a user (super admin only)
+ *     security: [{ bearerAuth: [] }]
+ */
+router.patch(
+  '/:userId/active',
+  requireSuperAdmin,
+  validate({ body: z.object({ isActive: z.boolean() }) }),
+  asyncHandler(async (req, res) => {
+    const { userId } = req.params;
+    // Guard against locking yourself out.
+    if (userId === req.user!.id) throw badRequest('You cannot change your own active status.');
+    const target = await prisma.user.findUnique({ where: { id: userId } });
+    if (!target) throw badRequest('User not found');
+
+    const { isActive } = req.body as { isActive: boolean };
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: userId }, data: { isActive } }),
+      // Deactivating: revoke sessions so they're signed out immediately (login
+      // already rejects inactive accounts, but this kills existing tokens too).
+      ...(isActive
+        ? []
+        : [prisma.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } })]),
+    ]);
+    writeAudit(req, isActive ? 'USER_ACTIVATED' : 'USER_DEACTIVATED', 'User', userId, { email: target.email });
+    res.json({ user: { id: target.id, isActive } });
+  }),
+);
+
+/**
+ * @openapi
+ * /users/{userId}:
+ *   delete:
+ *     tags: [Users]
+ *     summary: Permanently delete a user (super admin only)
+ *     security: [{ bearerAuth: [] }]
+ */
+router.delete(
+  '/:userId',
+  requireSuperAdmin,
+  asyncHandler(async (req, res) => {
+    const { userId } = req.params;
+    if (userId === req.user!.id) throw badRequest('You cannot delete your own account.');
+    const target = await prisma.user.findUnique({ where: { id: userId } });
+    if (!target) throw badRequest('User not found');
+
+    try {
+      // Cascade relations (memberships, assignments, watchers, comments, chat,
+      // notifications, tokens) delete with the user. Content they authored
+      // (created tasks, announcements, uploaded files, grades) is FK-restricted,
+      // so this throws P2003 rather than orphaning records.
+      await prisma.user.delete({ where: { id: userId } });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') {
+        throw conflict(
+          'This user has created content (tasks, announcements, files, or grades) and cannot be deleted. Deactivate them instead.',
+        );
+      }
+      throw e;
+    }
+    writeAudit(req, 'USER_DELETED', 'User', userId, { email: target.email });
+    res.status(204).end();
   }),
 );
 

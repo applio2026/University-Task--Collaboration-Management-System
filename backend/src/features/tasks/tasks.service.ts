@@ -81,7 +81,7 @@ export async function listTasks(
  *  cluster with its tasks, grouped under its space (and that space's workspace). */
 export async function overviewForUser(userId: string, systemRole: string) {
   const clusterWhere: Prisma.ClusterWhereInput =
-    systemRole === 'SUPER_ADMIN'
+    (systemRole === 'SUPER_ADMIN' || systemRole === 'ADMIN')
       ? { isArchived: false }
       : {
           isArchived: false,

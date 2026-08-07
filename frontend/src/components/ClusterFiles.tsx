@@ -118,7 +118,7 @@ export function ClusterFiles({ clusterId }: { clusterId: string }) {
                 <td style={{ color: 'var(--text-muted)' }}>{humanSize(f.sizeBytes)}</td>
                 <td style={{ color: 'var(--text-muted)' }}>{format(new Date(f.createdAt), 'd MMM yyyy')}</td>
                 <td style={{ textAlign: 'right' }}>
-                  {(f.uploadedBy === me?.id || me?.systemRole === 'SUPER_ADMIN') && (
+                  {(f.uploadedBy === me?.id || (me?.systemRole === 'SUPER_ADMIN' || me?.systemRole === 'ADMIN')) && (
                     <button
                       title="Delete"
                       onClick={() => removeMut.mutate(f.id)}
